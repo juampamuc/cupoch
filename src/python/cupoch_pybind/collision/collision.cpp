@@ -28,6 +28,40 @@
 
 using namespace cupoch;
 
+extern "C" {
+cupoch::wrapper::device_vector_size_t *
+cupoch_collision_result_get_first_indices(
+        const cupoch::collision::CollisionResult *result);
+cupoch::wrapper::device_vector_size_t *
+cupoch_collision_result_get_second_indices(
+        const cupoch::collision::CollisionResult *result);
+cupoch::wrapper::device_vector_vector2i *cupoch_collision_result_get_pairs(
+        cupoch::collision::CollisionResult *result);
+void cupoch_collision_result_set_pairs(
+        cupoch::collision::CollisionResult *result,
+        const cupoch::wrapper::device_vector_vector2i *pairs);
+cupoch::collision::CollisionResult *
+cupoch_collision_compute_intersection_primitives_voxel(
+        const cupoch::wrapper::device_vector_primitives *primitives,
+        const cupoch::geometry::VoxelGrid *voxelgrid,
+        float margin);
+cupoch::collision::CollisionResult *
+cupoch_collision_compute_intersection_voxel_primitives(
+        const cupoch::geometry::VoxelGrid *voxelgrid,
+        const cupoch::wrapper::device_vector_primitives *primitives,
+        float margin);
+cupoch::collision::CollisionResult *
+cupoch_collision_compute_intersection_primitives_occupancy(
+        const cupoch::wrapper::device_vector_primitives *primitives,
+        const cupoch::geometry::OccupancyGrid *occupancygrid,
+        float margin);
+cupoch::collision::CollisionResult *
+cupoch_collision_compute_intersection_occupancy_primitives(
+        const cupoch::geometry::OccupancyGrid *occupancygrid,
+        const cupoch::wrapper::device_vector_primitives *primitives,
+        float margin);
+}
+
 void pybind_collision_methods(py::module& m) {
     py::class_<collision::CollisionResult,
                std::shared_ptr<collision::CollisionResult>>
@@ -42,23 +76,28 @@ void pybind_collision_methods(py::module& m) {
                     })
             .def("get_first_collision_indices",
                     [] (const collision::CollisionResult& self) {
-                        return wrapper::device_vector_size_t(self.GetFirstCollisionIndices());
+                        std::unique_ptr<wrapper::device_vector_size_t> indices(
+                                cupoch_collision_result_get_first_indices(&self));
+                        return std::move(*indices);
                     })
             .def("get_second_collision_indices",
                     [] (const collision::CollisionResult& self) {
-                        return wrapper::device_vector_size_t(self.GetSecondCollisionIndices());
+                        std::unique_ptr<wrapper::device_vector_size_t> indices(
+                                cupoch_collision_result_get_second_indices(&self));
+                        return std::move(*indices);
                     })
             .def_readwrite("first", &collision::CollisionResult::first_)
             .def_readwrite("second", &collision::CollisionResult::second_)
             .def_property(
                     "collision_index_pairs",
                     [](collision::CollisionResult& res) {
-                        return wrapper::device_vector_vector2i(
-                                res.collision_index_pairs_);
+                        std::unique_ptr<wrapper::device_vector_vector2i> pairs(
+                                cupoch_collision_result_get_pairs(&res));
+                        return std::move(*pairs);
                     },
                     [](collision::CollisionResult& res,
                        const wrapper::device_vector_vector2i& vec) {
-                        wrapper::FromWrapper(res.collision_index_pairs_, vec);
+                        cupoch_collision_result_set_pairs(&res, &vec);
                     });
     py::enum_<collision::CollisionResult::CollisionType> collision_type(
             col_res, "Type", py::arithmetic());
@@ -117,8 +156,9 @@ void pybind_collision_methods(py::module& m) {
     m.def("compute_intersection",
           [](const wrapper::device_vector_primitives& primitives,
              const geometry::VoxelGrid& voxel, float margin) {
-              return collision::ComputeIntersection(primitives.data_, voxel,
-                                                    margin);
+              return std::shared_ptr<collision::CollisionResult>(
+                      cupoch_collision_compute_intersection_primitives_voxel(
+                              &primitives, &voxel, margin));
           },
           "Compute intersection betweeen Primitives and VoxelGrid.",
           "primitives"_a, "voxelgrid"_a, "margin"_a = 0.0f);
@@ -126,16 +166,18 @@ void pybind_collision_methods(py::module& m) {
           [](const geometry::VoxelGrid& voxel,
              const wrapper::device_vector_primitives& primitives,
              float margin) {
-              return collision::ComputeIntersection(voxel, primitives.data_,
-                                                    margin);
+              return std::shared_ptr<collision::CollisionResult>(
+                      cupoch_collision_compute_intersection_voxel_primitives(
+                              &voxel, &primitives, margin));
           },
           "Compute intersection betweeen VoxelGrid and Primitives.",
           "voxelgrid"_a, "primitives"_a, "margin"_a = 0.0f);
     m.def("compute_intersection",
           [](const wrapper::device_vector_primitives& primitives,
              const geometry::OccupancyGrid& occgrid, float margin) {
-              return collision::ComputeIntersection(primitives.data_, occgrid,
-                                                    margin);
+              return std::shared_ptr<collision::CollisionResult>(
+                      cupoch_collision_compute_intersection_primitives_occupancy(
+                              &primitives, &occgrid, margin));
           },
           "Compute intersection betweeen Primitives and OccupancyGrid.",
           "primitives"_a, "occgrid"_a, "margin"_a = 0.0f);
@@ -143,8 +185,9 @@ void pybind_collision_methods(py::module& m) {
           [](const geometry::OccupancyGrid& occgrid,
              const wrapper::device_vector_primitives& primitives,
              float margin) {
-              return collision::ComputeIntersection(occgrid, primitives.data_,
-                                                    margin);
+              return std::shared_ptr<collision::CollisionResult>(
+                      cupoch_collision_compute_intersection_occupancy_primitives(
+                              &occgrid, &primitives, margin));
           },
           "Compute intersection betweeen OccupancyGrid and Primitives.",
           "occgrid"_a, "primitives"_a, "margin"_a = 0.0f);

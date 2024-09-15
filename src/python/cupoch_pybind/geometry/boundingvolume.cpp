@@ -26,6 +26,33 @@
 
 using namespace cupoch;
 
+extern "C" {
+
+cupoch::wrapper::device_vector_size_t*
+cupoch_aabb3_get_point_indices_within_bounding_box(
+    const cupoch::geometry::AxisAlignedBoundingBox<3>* aabb,
+    const cupoch::wrapper::device_vector_wrapper<Eigen::Vector3f>* points);
+
+cupoch::geometry::AxisAlignedBoundingBox<3>*
+cupoch_aabb3_create_from_points(
+    const cupoch::wrapper::device_vector_wrapper<Eigen::Vector3f>* points);
+
+cupoch::wrapper::device_vector_size_t*
+cupoch_obb_get_point_indices_within_bounding_box(
+    const cupoch::geometry::OrientedBoundingBox* obb,
+    const cupoch::wrapper::device_vector_vector3f* points);
+
+cupoch::wrapper::device_vector_size_t*
+cupoch_aabb2_get_point_indices_within_bounding_box(
+    const cupoch::geometry::AxisAlignedBoundingBox<2>* aabb,
+    const cupoch::wrapper::device_vector_wrapper<Eigen::Vector2f>* points);
+
+cupoch::geometry::AxisAlignedBoundingBox<2>*
+cupoch_aabb2_create_from_points(
+    const cupoch::wrapper::device_vector_wrapper<Eigen::Vector2f>* points);
+
+} // extern "C"
+
 template <typename AabbT, int Dim>
 void bind_axis_aligned_bounding_box(AabbT &axis_aligned_bounding_box) {
     py::detail::bind_default_constructor<geometry::AxisAlignedBoundingBox<Dim>>(
@@ -54,20 +81,48 @@ void bind_axis_aligned_bounding_box(AabbT &axis_aligned_bounding_box) {
                  "Returns the maximum extent, i.e. the maximum of X, Y and Z "
                  "axis")
             .def("get_point_indices_within_bounding_box",
-                 [] (const geometry::AxisAlignedBoundingBox<Dim> &aabb,
-                     const wrapper::device_vector_wrapper<Eigen::Matrix<float, Dim, 1>>& points) {
-                         return wrapper::device_vector_size_t(aabb.GetPointIndicesWithinBoundingBox(points.data_));
-                  },
-                 "Return indices to points that are within the bounding box.",
+               [] (const geometry::AxisAlignedBoundingBox<Dim> &aabb,
+                   const wrapper::device_vector_wrapper<Eigen::Matrix<float, Dim, 1>>& points) {
+                   if constexpr (Dim == 3) {
+                       auto tmp = std::unique_ptr<wrapper::device_vector_size_t>(
+                           cupoch_aabb3_get_point_indices_within_bounding_box(
+                               reinterpret_cast<const geometry::AxisAlignedBoundingBox<3>*>(&aabb),
+                               reinterpret_cast<const wrapper::device_vector_wrapper<Eigen::Vector3f>*>(&points)
+                           )
+                       );
+                       return *tmp;
+                   } else {
+                       auto tmp = std::unique_ptr<wrapper::device_vector_size_t>(
+                           cupoch_aabb2_get_point_indices_within_bounding_box(
+                               reinterpret_cast<const geometry::AxisAlignedBoundingBox<2>*>(&aabb),
+                               reinterpret_cast<const wrapper::device_vector_wrapper<Eigen::Vector2f>*>(&points)
+                           )
+                       );
+                       return *tmp;
+                   }
+               },
+               "Return indices to points that are within the bounding box.",
+               "points"_a)
+            .def_static("create_from_points",
+                 [] (const wrapper::device_vector_wrapper<Eigen::Matrix<float, Dim, 1>>& points) {
+                     if constexpr (Dim == 3) {
+                         auto tmp = std::unique_ptr<geometry::AxisAlignedBoundingBox<3>>(
+                             cupoch_aabb3_create_from_points(
+                                 reinterpret_cast<const wrapper::device_vector_wrapper<Eigen::Vector3f>*>(&points)
+                             )
+                         );
+                         return *tmp;
+                     } else {
+                         auto tmp = std::unique_ptr<geometry::AxisAlignedBoundingBox<2>>(
+                             cupoch_aabb2_create_from_points(
+                                 reinterpret_cast<const wrapper::device_vector_wrapper<Eigen::Vector2f>*>(&points)
+                             )
+                         );
+                         return *tmp;
+                     }
+                 },
+                 "Creates the bounding box that encloses the set of points.",
                  "points"_a)
-            .def_static(
-                    "create_from_points",
-                    py::overload_cast<
-                            const utility::device_vector<Eigen::Matrix<float, Dim, 1>> &>(
-                            &geometry::AxisAlignedBoundingBox<Dim>::
-                                    CreateFromPoints),
-                    "Creates the bounding box that encloses the set of points.",
-                    "points"_a)
             .def_readwrite("min_bound",
                            &geometry::AxisAlignedBoundingBox<Dim>::min_bound_,
                            "``float32`` array of shape ``(3, )``")
@@ -133,12 +188,15 @@ void pybind_boundingvolume(py::module &m) {
                      return std::string("geometry::OrientedBoundingBox");
                  })
             .def("get_point_indices_within_bounding_box",
-                 [] (const geometry::OrientedBoundingBox &box,
-                     const wrapper::device_vector_vector3f& points) {
-                         return wrapper::device_vector_size_t(box.GetPointIndicesWithinBoundingBox(points.data_));
-                  },
-                 "Return indices to points that are within the bounding box.",
-                 "points"_a)
+               [] (const geometry::OrientedBoundingBox &box,
+                   const wrapper::device_vector_wrapper<Eigen::Vector3f>& points) {
+                   auto tmp = std::unique_ptr<wrapper::device_vector_size_t>(
+                       cupoch_obb_get_point_indices_within_bounding_box(&box, &points)
+                   );
+                   return *tmp;
+               },
+               "Return indices to points that are within the bounding box.",
+               "points"_a)
             .def_static("create_from_axis_aligned_bounding_box",
                         &geometry::OrientedBoundingBox::
                                 CreateFromAxisAlignedBoundingBox,

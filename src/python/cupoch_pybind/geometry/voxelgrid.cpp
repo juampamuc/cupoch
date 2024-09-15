@@ -33,6 +33,17 @@
 
 using namespace cupoch;
 
+extern "C" {
+cupoch::wrapper::VoxelMap *cupoch_voxelgrid_get_voxels(
+        cupoch::geometry::VoxelGrid *voxelgrid);
+void cupoch_voxelgrid_set_voxels(cupoch::geometry::VoxelGrid *voxelgrid,
+                                 const cupoch::wrapper::VoxelMap *voxels);
+void cupoch_voxelgrid_paint_indexed_color(
+        cupoch::geometry::VoxelGrid *voxelgrid,
+        const cupoch::wrapper::device_vector_size_t *indices,
+        const Eigen::Vector3f *color);
+}
+
 void pybind_voxelgrid(py::module &m) {
     py::class_<wrapper::VoxelMap, std::shared_ptr<wrapper::VoxelMap>> voxel_map(
             m, "DeviceVoxelMap");
@@ -86,12 +97,12 @@ void pybind_voxelgrid(py::module &m) {
             .def_property(
                     "voxels",
                     [](geometry::VoxelGrid &vg) {
-                        return wrapper::VoxelMap(vg.voxels_keys_,
-                                                 vg.voxels_values_);
+                        std::unique_ptr<wrapper::VoxelMap> voxels(
+                                cupoch_voxelgrid_get_voxels(&vg));
+                        return std::move(*voxels);
                     },
                     [](geometry::VoxelGrid &vg, const wrapper::VoxelMap &map) {
-                        wrapper::FromWrapper(vg.voxels_keys_, vg.voxels_values_,
-                                             map);
+                        cupoch_voxelgrid_set_voxels(&vg, &map);
                     })
             .def(py::self + py::self)
             .def(py::self += py::self)
@@ -103,8 +114,10 @@ void pybind_voxelgrid(py::module &m) {
                  "Returns voxel index given query point.")
             .def("paint_uniform_color", &geometry::VoxelGrid::PaintUniformColor)
             .def("paint_indexed_color",
-                 [] (geometry::VoxelGrid& self, const wrapper::device_vector_size_t& indices, const Eigen::Vector3f& color) {
-                     return self.PaintIndexedColor(indices.data_, color);
+                 [] (geometry::VoxelGrid& self, const wrapper::device_vector_size_t& indices, const Eigen::Vector3f& color) -> geometry::VoxelGrid& {
+                     cupoch_voxelgrid_paint_indexed_color(&self, &indices,
+                                                          &color);
+                     return self;
                  })
             .def("check_if_included", &geometry::VoxelGrid::CheckIfIncluded,
                  "queries"_a,

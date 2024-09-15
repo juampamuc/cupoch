@@ -23,12 +23,77 @@
 #include "cupoch/camera/pinhole_camera_intrinsic.h"
 #include "cupoch/geometry/rgbdimage.h"
 #include "cupoch/geometry/laserscanbuffer.h"
-#include "cupoch_pybind/dl_converter.h"
+#include "cupoch_pybind/dlpack_utils.h"
 #include "cupoch_pybind/docstring.h"
 #include "cupoch_pybind/geometry/geometry.h"
 #include "cupoch_pybind/geometry/geometry_trampoline.h"
 
 using namespace cupoch;
+
+extern "C" {
+cupoch::wrapper::device_vector_vector3f *cupoch_pointcloud_get_points(
+        cupoch::geometry::PointCloud *pointcloud);
+void cupoch_pointcloud_set_points(
+        cupoch::geometry::PointCloud *pointcloud,
+        const cupoch::wrapper::device_vector_vector3f *points);
+cupoch::wrapper::device_vector_vector3f *cupoch_pointcloud_get_normals(
+        cupoch::geometry::PointCloud *pointcloud);
+void cupoch_pointcloud_set_normals(
+        cupoch::geometry::PointCloud *pointcloud,
+        const cupoch::wrapper::device_vector_vector3f *normals);
+cupoch::wrapper::device_vector_vector3f *cupoch_pointcloud_get_colors(
+        cupoch::geometry::PointCloud *pointcloud);
+void cupoch_pointcloud_set_colors(
+        cupoch::geometry::PointCloud *pointcloud,
+        const cupoch::wrapper::device_vector_vector3f *colors);
+cupoch::geometry::PointCloud *cupoch_pointcloud_select_by_index(
+        const cupoch::geometry::PointCloud *pointcloud,
+        const cupoch::wrapper::device_vector_size_t *indices,
+        bool invert);
+cupoch::geometry::PointCloud *cupoch_pointcloud_select_by_mask(
+        const cupoch::geometry::PointCloud *pointcloud,
+        const cupoch::wrapper::device_vector_bool *mask,
+        bool invert);
+void cupoch_pointcloud_remove_radius_outlier(
+        const cupoch::geometry::PointCloud *pointcloud,
+        size_t nb_points,
+        float radius,
+        cupoch::geometry::PointCloud **out_pointcloud,
+        cupoch::wrapper::device_vector_size_t **out_indices);
+void cupoch_pointcloud_remove_statistical_outlier(
+        const cupoch::geometry::PointCloud *pointcloud,
+        size_t nb_neighbors,
+        float std_ratio,
+        cupoch::geometry::PointCloud **out_pointcloud,
+        cupoch::wrapper::device_vector_size_t **out_indices);
+cupoch::wrapper::device_vector_int *cupoch_pointcloud_cluster_dbscan(
+        const cupoch::geometry::PointCloud *pointcloud,
+        float eps,
+        size_t min_points,
+        bool print_progress,
+        size_t max_edges);
+cupoch::wrapper::device_vector_size_t *cupoch_pointcloud_segment_plane(
+        const cupoch::geometry::PointCloud *pointcloud,
+        float distance_threshold,
+        int ransac_n,
+        int num_iterations,
+        Eigen::Vector4f *plane_model);
+void *cupoch_pointcloud_points_to_dlpack(
+        cupoch::geometry::PointCloud *pointcloud);
+void cupoch_pointcloud_points_from_dlpack(
+        cupoch::geometry::PointCloud *pointcloud,
+        const DLManagedTensor *managed);
+void *cupoch_pointcloud_normals_to_dlpack(
+        cupoch::geometry::PointCloud *pointcloud);
+void cupoch_pointcloud_normals_from_dlpack(
+        cupoch::geometry::PointCloud *pointcloud,
+        const DLManagedTensor *managed);
+void *cupoch_pointcloud_colors_to_dlpack(
+        cupoch::geometry::PointCloud *pointcloud);
+void cupoch_pointcloud_colors_from_dlpack(
+        cupoch::geometry::PointCloud *pointcloud,
+        const DLManagedTensor *managed);
+}
 
 void pybind_pointcloud(py::module &m) {
     py::class_<geometry::PointCloud, PyGeometry3D<geometry::PointCloud>,
@@ -40,11 +105,13 @@ void pybind_pointcloud(py::module &m) {
     py::detail::bind_default_constructor<geometry::PointCloud>(pointcloud);
     py::detail::bind_copy_functions<geometry::PointCloud>(pointcloud);
     pointcloud
-            .def(py::init<const thrust::host_vector<Eigen::Vector3f> &>(),
+            .def(py::init<const std::vector<Eigen::Vector3f> &>(),
                  "Create a PointCloud from points", "points"_a)
             .def(py::init([](const wrapper::device_vector_vector3f &points) {
-                     return std::unique_ptr<geometry::PointCloud>(
-                             new geometry::PointCloud(points.data_));
+                     auto pointcloud = std::unique_ptr<geometry::PointCloud>(
+                             new geometry::PointCloud());
+                     cupoch_pointcloud_set_points(pointcloud.get(), &points);
+                     return pointcloud;
                  }),
                  "Create a PointCloud from points", "points"_a)
             .def("__repr__",
@@ -55,53 +122,65 @@ void pybind_pointcloud(py::module &m) {
             .def_property(
                     "points",
                     [](geometry::PointCloud &pcd) {
-                        return wrapper::device_vector_vector3f(pcd.points_);
+                        std::unique_ptr<wrapper::device_vector_vector3f> points(
+                                cupoch_pointcloud_get_points(&pcd));
+                        return std::move(*points);
                     },
                     [](geometry::PointCloud &pcd,
                        const wrapper::device_vector_vector3f &vec) {
-                        wrapper::FromWrapper(pcd.points_, vec);
+                        cupoch_pointcloud_set_points(&pcd, &vec);
                     })
             .def_property(
                     "normals",
                     [](geometry::PointCloud &pcd) {
-                        return wrapper::device_vector_vector3f(pcd.normals_);
+                        std::unique_ptr<wrapper::device_vector_vector3f> normals(
+                                cupoch_pointcloud_get_normals(&pcd));
+                        return std::move(*normals);
                     },
                     [](geometry::PointCloud &pcd,
                        const wrapper::device_vector_vector3f &vec) {
-                        wrapper::FromWrapper(pcd.normals_, vec);
+                        cupoch_pointcloud_set_normals(&pcd, &vec);
                     })
             .def_property(
                     "colors",
                     [](geometry::PointCloud &pcd) {
-                        return wrapper::device_vector_vector3f(pcd.colors_);
+                        std::unique_ptr<wrapper::device_vector_vector3f> colors(
+                                cupoch_pointcloud_get_colors(&pcd));
+                        return std::move(*colors);
                     },
                     [](geometry::PointCloud &pcd,
                        const wrapper::device_vector_vector3f &vec) {
-                        wrapper::FromWrapper(pcd.colors_, vec);
+                        cupoch_pointcloud_set_colors(&pcd, &vec);
                     })
             .def("to_points_dlpack",
                  [](geometry::PointCloud &pcd) {
-                     return dlpack::ToDLpackCapsule<Eigen::Vector3f>(pcd.points_);
+                     return pybind::MakeDLpackCapsule(
+                             cupoch_pointcloud_points_to_dlpack(&pcd));
                  })
             .def("to_normals_dlpack",
                  [](geometry::PointCloud &pcd) {
-                     return dlpack::ToDLpackCapsule<Eigen::Vector3f>(pcd.normals_);
+                     return pybind::MakeDLpackCapsule(
+                             cupoch_pointcloud_normals_to_dlpack(&pcd));
                  })
             .def("to_colors_dlpack",
                  [](geometry::PointCloud &pcd) {
-                     return dlpack::ToDLpackCapsule<Eigen::Vector3f>(pcd.colors_);
+                     return pybind::MakeDLpackCapsule(
+                             cupoch_pointcloud_colors_to_dlpack(&pcd));
                  })
             .def("from_points_dlpack",
                  [](geometry::PointCloud &pcd, py::capsule dlpack) {
-                     dlpack::FromDLpackCapsule<Eigen::Vector3f>(dlpack, pcd.points_);
+                     cupoch_pointcloud_points_from_dlpack(
+                             &pcd, pybind::GetDLManagedTensor(dlpack));
                  })
             .def("from_normals_dlpack",
                  [](geometry::PointCloud &pcd, py::capsule dlpack) {
-                     dlpack::FromDLpackCapsule<Eigen::Vector3f>(dlpack, pcd.normals_);
+                     cupoch_pointcloud_normals_from_dlpack(
+                             &pcd, pybind::GetDLManagedTensor(dlpack));
                  })
             .def("from_colors_dlpack",
                  [](geometry::PointCloud &pcd, py::capsule dlpack) {
-                     dlpack::FromDLpackCapsule<Eigen::Vector3f>(dlpack, pcd.colors_);
+                     cupoch_pointcloud_colors_from_dlpack(
+                             &pcd, pybind::GetDLManagedTensor(dlpack));
                  })
             .def(py::self + py::self)
             .def(py::self += py::self)
@@ -127,7 +206,9 @@ void pybind_pointcloud(py::module &m) {
                     [](const geometry::PointCloud &pcd,
                        const wrapper::device_vector_size_t &index,
                        bool invert) {
-                        return pcd.SelectByIndex(index.data_, invert);
+                        return std::shared_ptr<geometry::PointCloud>(
+                                cupoch_pointcloud_select_by_index(
+                                        &pcd, &index, invert));
                     },
                     "Function to select points from input pointcloud into "
                     "output "
@@ -141,7 +222,9 @@ void pybind_pointcloud(py::module &m) {
                     [](const geometry::PointCloud &pcd,
                        const wrapper::device_vector_bool &mask,
                        bool invert) {
-                        return pcd.SelectByMask(mask.data_, invert);
+                        return std::shared_ptr<geometry::PointCloud>(
+                                cupoch_pointcloud_select_by_mask(
+                                        &pcd, &mask, invert));
                     },
                     "Function to select points from input pointcloud into "
                     "output "
@@ -191,12 +274,16 @@ void pybind_pointcloud(py::module &m) {
                     "remove_radius_outlier",
                     [](const geometry::PointCloud &pcd, size_t nb_points,
                        float search_radius) {
-                        auto res = pcd.RemoveRadiusOutliers(nb_points,
-                                                            search_radius);
+                        geometry::PointCloud *filtered = nullptr;
+                        wrapper::device_vector_size_t *indices = nullptr;
+                        cupoch_pointcloud_remove_radius_outlier(
+                                &pcd, nb_points, search_radius, &filtered,
+                                &indices);
                         return std::make_tuple(
-                                std::get<0>(res),
-                                wrapper::device_vector_size_t(
-                                        std::move(std::get<1>(res))));
+                                std::shared_ptr<geometry::PointCloud>(filtered),
+                                std::move(*std::unique_ptr<
+                                          wrapper::device_vector_size_t>(
+                                        indices)));
                     },
                     "Function to remove points that have less than nb_points"
                     " in a given sphere of a given radius",
@@ -205,12 +292,16 @@ void pybind_pointcloud(py::module &m) {
                     "remove_statistical_outlier",
                     [](const geometry::PointCloud &pcd, size_t nb_neighbors,
                        float std_ratio) {
-                        auto res = pcd.RemoveStatisticalOutliers(nb_neighbors,
-                                                                 std_ratio);
+                        geometry::PointCloud *filtered = nullptr;
+                        wrapper::device_vector_size_t *indices = nullptr;
+                        cupoch_pointcloud_remove_statistical_outlier(
+                                &pcd, nb_neighbors, std_ratio, &filtered,
+                                &indices);
                         return std::make_tuple(
-                                std::get<0>(res),
-                                wrapper::device_vector_size_t(
-                                        std::move(std::get<1>(res))));
+                                std::shared_ptr<geometry::PointCloud>(filtered),
+                                std::move(*std::unique_ptr<
+                                          wrapper::device_vector_size_t>(
+                                        indices)));
                     },
                     "Function to remove points that are further away from "
                     "their "
@@ -230,9 +321,11 @@ void pybind_pointcloud(py::module &m) {
                     [](const geometry::PointCloud &pcd, float eps,
                        size_t min_points, bool print_progress,
                        size_t max_edges) {
-                        auto res = pcd.ClusterDBSCAN(eps, min_points,
-                                                     print_progress, max_edges);
-                        return wrapper::device_vector_int(std::move(*res));
+                        std::unique_ptr<wrapper::device_vector_int> labels(
+                                cupoch_pointcloud_cluster_dbscan(
+                                        &pcd, eps, min_points, print_progress,
+                                        max_edges));
+                        return std::move(*labels);
                     },
                     "Cluster PointCloud using the DBSCAN algorithm  Ester et "
                     "al., "
@@ -248,9 +341,12 @@ void pybind_pointcloud(py::module &m) {
                     float distance_threshold,
                     int ransac_n,
                     int num_iterations) {
-                     auto res = pcd.SegmentPlane(distance_threshold, ransac_n, num_iterations);
-                     return std::make_tuple(std::get<0>(res),
-                              wrapper::device_vector_size_t(std::move(std::get<1>(res))));
+                     Eigen::Vector4f plane_model;
+                     std::unique_ptr<wrapper::device_vector_size_t> indices(
+                             cupoch_pointcloud_segment_plane(
+                                     &pcd, distance_threshold, ransac_n,
+                                     num_iterations, &plane_model));
+                     return std::make_tuple(plane_model, std::move(*indices));
                  },
                  "Segments a plane in the point cloud using the RANSAC "
                  "algorithm.",

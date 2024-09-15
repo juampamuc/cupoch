@@ -23,6 +23,37 @@
 #include "cupoch/utility/device_vector.h"
 #include "cupoch/geometry/occupancygrid.h"
 
+extern "C" {
+void cupoch_device_vector_int_iadd_host(
+        cupoch::wrapper::device_vector_int *self,
+        const int *host_data,
+        size_t size);
+void cupoch_device_vector_ulong_iadd_host(
+        cupoch::wrapper::device_vector_wrapper<unsigned long> *self,
+        const unsigned long *host_data,
+        size_t size);
+void cupoch_device_vector_float_iadd_host(
+        cupoch::wrapper::device_vector_float *self,
+        const float *host_data,
+        size_t size);
+void cupoch_device_vector_vector2f_iadd_host(
+        cupoch::wrapper::device_vector_vector2f *self,
+        const Eigen::Vector2f *host_data,
+        size_t size);
+void cupoch_device_vector_vector3f_iadd_host(
+        cupoch::wrapper::device_vector_vector3f *self,
+        const Eigen::Vector3f *host_data,
+        size_t size);
+void cupoch_device_vector_vector2i_iadd_host(
+        cupoch::wrapper::device_vector_vector2i *self,
+        const Eigen::Vector2i *host_data,
+        size_t size);
+void cupoch_device_vector_vector3i_iadd_host(
+        cupoch::wrapper::device_vector_vector3i *self,
+        const Eigen::Vector3i *host_data,
+        size_t size);
+}
+
 namespace pybind11 {
 
 template <typename Vector,
@@ -56,6 +87,66 @@ cupoch::wrapper::device_vector_wrapper<EigenVector> py_array_to_vectors(
 
 namespace {
 
+template <typename Scalar>
+void DeviceVectorIAddHost(cupoch::wrapper::device_vector_wrapper<Scalar> &self,
+                          const Scalar *host_data,
+                          size_t size);
+
+template <>
+void DeviceVectorIAddHost<int>(cupoch::wrapper::device_vector_wrapper<int> &self,
+                               const int *host_data,
+                               size_t size) {
+    cupoch_device_vector_int_iadd_host(&self, host_data, size);
+}
+
+template <>
+void DeviceVectorIAddHost<unsigned long>(
+        cupoch::wrapper::device_vector_wrapper<unsigned long> &self,
+        const unsigned long *host_data,
+        size_t size) {
+    cupoch_device_vector_ulong_iadd_host(&self, host_data, size);
+}
+
+template <>
+void DeviceVectorIAddHost<float>(
+        cupoch::wrapper::device_vector_wrapper<float> &self,
+        const float *host_data,
+        size_t size) {
+    cupoch_device_vector_float_iadd_host(&self, host_data, size);
+}
+
+template <>
+void DeviceVectorIAddHost<Eigen::Vector2f>(
+        cupoch::wrapper::device_vector_wrapper<Eigen::Vector2f> &self,
+        const Eigen::Vector2f *host_data,
+        size_t size) {
+    cupoch_device_vector_vector2f_iadd_host(&self, host_data, size);
+}
+
+template <>
+void DeviceVectorIAddHost<Eigen::Vector3f>(
+        cupoch::wrapper::device_vector_wrapper<Eigen::Vector3f> &self,
+        const Eigen::Vector3f *host_data,
+        size_t size) {
+    cupoch_device_vector_vector3f_iadd_host(&self, host_data, size);
+}
+
+template <>
+void DeviceVectorIAddHost<Eigen::Vector2i>(
+        cupoch::wrapper::device_vector_wrapper<Eigen::Vector2i> &self,
+        const Eigen::Vector2i *host_data,
+        size_t size) {
+    cupoch_device_vector_vector2i_iadd_host(&self, host_data, size);
+}
+
+template <>
+void DeviceVectorIAddHost<Eigen::Vector3i>(
+        cupoch::wrapper::device_vector_wrapper<Eigen::Vector3i> &self,
+        const Eigen::Vector3i *host_data,
+        size_t size) {
+    cupoch_device_vector_vector3i_iadd_host(&self, host_data, size);
+}
+
 template <typename Scalar,
           typename Vector = cupoch::wrapper::device_vector_wrapper<Scalar>,
           typename holder_type = std::unique_ptr<Vector>>
@@ -64,7 +155,6 @@ py::class_<Vector, holder_type> pybind_eigen_vector_of_struct(
     auto vec = py::bind_vector_without_repr<
             cupoch::wrapper::device_vector_wrapper<Scalar>>(m, bind_name,
                                                             py::module_local());
-    vec.def(py::init<cupoch::utility::pinned_host_vector<Scalar>>());
     vec.def("cpu", &cupoch::wrapper::device_vector_wrapper<Scalar>::cpu);
     vec.def("__copy__", [](cupoch::wrapper::device_vector_wrapper<Scalar> &v) {
         return cupoch::wrapper::device_vector_wrapper<Scalar>(v);
@@ -83,13 +173,15 @@ template <typename Scalar,
 py::class_<Vector, holder_type> pybind_eigen_vector_of_scalar(
         py::module &m, const std::string &bind_name) {
     auto vec = pybind_eigen_vector_of_struct<Scalar>(m, bind_name);
+    vec.def(py::init([](const cupoch::utility::pinned_host_vector<Scalar> &host) {
+        return cupoch::wrapper::device_vector_wrapper<Scalar>(
+                host.data(), static_cast<int>(host.size()));
+    }));
     vec.def(
             "__iadd__",
             [](cupoch::wrapper::device_vector_wrapper<Scalar> &self,
                const Eigen::Matrix<Scalar, Eigen::Dynamic, 1> &other) {
-                thrust::host_vector<Scalar> hso(other.data(),
-                                                other.data() + other.rows());
-                self += hso;
+                DeviceVectorIAddHost(self, other.data(), other.rows());
                 return self;
             },
             py::is_operator());
@@ -130,6 +222,10 @@ py::class_<Vector, holder_type> pybind_eigen_vector_of_vector(
             cupoch::wrapper::device_vector_wrapper<EigenVector>>(
             m, bind_name, py::module_local());
     vec.def(py::init(init_func));
+    vec.def(py::init([](const cupoch::utility::pinned_host_vector<EigenVector> &host) {
+        return cupoch::wrapper::device_vector_wrapper<EigenVector>(
+                host.data(), static_cast<int>(host.size()));
+    }));
     vec.def("__repr__",
             [repr_name](
                     const cupoch::wrapper::device_vector_wrapper<EigenVector>
@@ -144,11 +240,11 @@ py::class_<Vector, holder_type> pybind_eigen_vector_of_vector(
             [](cupoch::wrapper::device_vector_wrapper<EigenVector> &self,
                const Eigen::Matrix<Scalar, Eigen::Dynamic,
                                    EigenVector::RowsAtCompileTime> &other) {
-                thrust::host_vector<EigenVector> hso(other.rows());
+                std::vector<EigenVector> hso(other.rows());
                 for (int i = 0; i < other.rows(); ++i) {
                     hso[i] = other.row(i);
                 }
-                self += hso;
+                DeviceVectorIAddHost(self, hso.data(), hso.size());
                 return self;
             },
             py::is_operator());

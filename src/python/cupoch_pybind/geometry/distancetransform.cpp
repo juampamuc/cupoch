@@ -29,6 +29,9 @@
 #include "cupoch_pybind/geometry/geometry_trampoline.h"
 
 using namespace cupoch;
+extern "C" cupoch::wrapper::device_vector_float*
+_cupoch_distancetransform_get_distances_bridge(const cupoch::geometry::DistanceTransform*,
+                                               const cupoch::wrapper::device_vector_vector3f*);
 
 void pybind_distancetransform(py::module &m) {
     py::class_<geometry::DistanceVoxel,
@@ -80,10 +83,12 @@ void pybind_distancetransform(py::module &m) {
                  "Function to compute EDT from voxel grid.")
             .def("get_distance", &geometry::DistanceTransform::GetDistance)
             .def("get_distances",
-                 [] (const geometry::DistanceTransform& self,
-                     const wrapper::device_vector_vector3f& points) {
-                     return wrapper::device_vector_float(*self.GetDistances(points.data_));
-                 })
+               [](const geometry::DistanceTransform& self,
+                  const wrapper::device_vector_vector3f& points) {
+                 std::unique_ptr<wrapper::device_vector_float>
+                   out(_cupoch_distancetransform_get_distances_bridge(&self, &points));
+                 return *out;
+               })
             .def_static(
                     "create_from_occupancy_grid",
                     &geometry::DistanceTransform::CreateFromOccupancyGrid,

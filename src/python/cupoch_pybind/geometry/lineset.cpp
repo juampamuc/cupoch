@@ -22,30 +22,124 @@
 
 #include "cupoch/geometry/pointcloud.h"
 #include "cupoch_pybind/docstring.h"
-#include "cupoch_pybind/dl_converter.h"
+#include "cupoch_pybind/dlpack_utils.h"
 #include "cupoch_pybind/geometry/geometry.h"
 #include "cupoch_pybind/geometry/geometry_trampoline.h"
 
 using namespace cupoch;
+extern "C" {
+  // 3D
+  cupoch::wrapper::device_vector_wrapper<Eigen::Vector3f>*
+    cupoch_lineset3_get_points(cupoch::geometry::LineSet<3>*);
+  void cupoch_lineset3_set_points(cupoch::geometry::LineSet<3>*,
+    const cupoch::wrapper::device_vector_wrapper<Eigen::Vector3f>*);
+  cupoch::wrapper::device_vector_vector2i*
+    cupoch_lineset3_get_lines(cupoch::geometry::LineSet<3>*);
+  void cupoch_lineset3_set_lines(cupoch::geometry::LineSet<3>*,
+    const cupoch::wrapper::device_vector_vector2i*);
+  cupoch::wrapper::device_vector_vector3f*
+    cupoch_lineset3_get_colors(cupoch::geometry::LineSet<3>*);
+  void cupoch_lineset3_set_colors(cupoch::geometry::LineSet<3>*,
+    const cupoch::wrapper::device_vector_vector3f*);
+  cupoch::geometry::LineSet<3>*
+    cupoch_lineset3_create_from_wrappers(
+      const cupoch::wrapper::device_vector_wrapper<Eigen::Vector3f>*,
+      const cupoch::wrapper::device_vector_vector2i*);
+  void cupoch_lineset3_paint_indexed_color(
+    cupoch::geometry::LineSet<3>*,
+    const cupoch::wrapper::device_vector_size_t*,
+    const Eigen::Vector3f*);
+  void cupoch_lineset3_assign_from_correspondences(
+    cupoch::geometry::LineSet<3>* out,
+    const cupoch::geometry::PointCloud* c0,
+    const cupoch::geometry::PointCloud* c1,
+    const cupoch::wrapper::device_vector_wrapper<thrust::pair<int, int>>* corrs);
+
+  // 2D
+  cupoch::wrapper::device_vector_wrapper<Eigen::Matrix<float,2,1>>*
+    cupoch_lineset2_get_points(cupoch::geometry::LineSet<2>*);
+  void cupoch_lineset2_set_points(cupoch::geometry::LineSet<2>*,
+    const cupoch::wrapper::device_vector_wrapper<Eigen::Matrix<float,2,1>>*);
+  cupoch::wrapper::device_vector_vector2i*
+    cupoch_lineset2_get_lines(cupoch::geometry::LineSet<2>*);
+  void cupoch_lineset2_set_lines(cupoch::geometry::LineSet<2>*,
+    const cupoch::wrapper::device_vector_vector2i*);
+  cupoch::wrapper::device_vector_vector3f*
+    cupoch_lineset2_get_colors(cupoch::geometry::LineSet<2>*);
+  void cupoch_lineset2_set_colors(cupoch::geometry::LineSet<2>*,
+    const cupoch::wrapper::device_vector_vector3f*);
+  cupoch::geometry::LineSet<2>*
+    cupoch_lineset2_create_from_wrappers(
+      const cupoch::wrapper::device_vector_wrapper<Eigen::Matrix<float,2,1>>*,
+      const cupoch::wrapper::device_vector_vector2i*);
+  void cupoch_lineset2_paint_indexed_color(
+    cupoch::geometry::LineSet<2>*,
+    const cupoch::wrapper::device_vector_size_t*,
+    const Eigen::Vector3f*);
+  void cupoch_lineset2_assign_from_correspondences(
+    cupoch::geometry::LineSet<2>* out,
+    const cupoch::geometry::PointCloud* c0,
+    const cupoch::geometry::PointCloud* c1,
+    const cupoch::wrapper::device_vector_wrapper<thrust::pair<int, int>>* corrs);
+  void* cupoch_lineset3_lines_to_dlpack(cupoch::geometry::LineSet<3>*);
+  void cupoch_lineset3_lines_from_dlpack(cupoch::geometry::LineSet<3>*,
+    const DLManagedTensor*);
+  void* cupoch_lineset2_lines_to_dlpack(cupoch::geometry::LineSet<2>*);
+  void cupoch_lineset2_lines_from_dlpack(cupoch::geometry::LineSet<2>*,
+    const DLManagedTensor*);
+}
 
 namespace {
+
+template <int Dim>
+struct LineSetDLPackBridge;
+
+template <>
+struct LineSetDLPackBridge<3> {
+    static py::capsule ToLinesDLpack(geometry::LineSet<3> &line) {
+        return pybind::MakeDLpackCapsule(
+                cupoch_lineset3_lines_to_dlpack(&line));
+    }
+
+    static void FromLinesDLpack(geometry::LineSet<3> &line,
+                                py::capsule dlpack) {
+        cupoch_lineset3_lines_from_dlpack(
+                &line, pybind::GetDLManagedTensor(dlpack));
+    }
+};
+
+template <>
+struct LineSetDLPackBridge<2> {
+    static py::capsule ToLinesDLpack(geometry::LineSet<2> &line) {
+        return pybind::MakeDLpackCapsule(
+                cupoch_lineset2_lines_to_dlpack(&line));
+    }
+
+    static void FromLinesDLpack(geometry::LineSet<2> &line,
+                                py::capsule dlpack) {
+        cupoch_lineset2_lines_from_dlpack(
+                &line, pybind::GetDLManagedTensor(dlpack));
+    }
+};
 
 template <class LineSetT, int Dim>
 void bind_def(LineSetT& lineset) {
     py::detail::bind_default_constructor<geometry::LineSet<Dim>>(lineset);
     py::detail::bind_copy_functions<geometry::LineSet<Dim>>(lineset);
-    lineset.def(py::init<const thrust::host_vector<Eigen::Matrix<float, Dim, 1>> &,
-                         const thrust::host_vector<Eigen::Vector2i> &>(),
+    lineset.def(py::init<const std::vector<Eigen::Matrix<float, Dim, 1>> &,
+                         const std::vector<Eigen::Vector2i> &>(),
                 "Create a LineSet from given points and line indices",
                 "points"_a, "lines"_a)
             .def(py::init([](const wrapper::device_vector_wrapper<Eigen::Matrix<float, Dim, 1>> &points,
                              const wrapper::device_vector_vector2i &lines) {
-                     return std::unique_ptr<geometry::LineSet<Dim>>(
-                             new geometry::LineSet<Dim>(points.data_,
-                                                        lines.data_));
-                 }),
-                 "Create a LineSet from given points and line indices",
-                 "points"_a, "lines"_a)
+                     if constexpr (Dim == 3) {
+                         return std::unique_ptr<geometry::LineSet<Dim>>(
+                             cupoch_lineset3_create_from_wrappers(&points, &lines));
+                     } else {
+                         return std::unique_ptr<geometry::LineSet<Dim>>(
+                             cupoch_lineset2_create_from_wrappers(&points, &lines));
+                     }
+                 }))
             .def(py::init<const std::vector<Eigen::Matrix<float, Dim, 1>>>(),
                  "Create a LineSet from given path",
                  "path"_a)
@@ -68,14 +162,23 @@ void bind_def(LineSetT& lineset) {
                  "Assigns each line in the line set the same color.")
             .def("paint_indexed_color",
                  [] (geometry::LineSet<Dim>& self, const wrapper::device_vector_size_t& indices, const Eigen::Vector3f& color) {
-                     return self.PaintIndexedColor(indices.data_, color);
+                     if constexpr (Dim == 3) {
+                         cupoch_lineset3_paint_indexed_color(&self, &indices, &color);
+                     } else {
+                         cupoch_lineset2_paint_indexed_color(&self, &indices, &color);
+                     }
                  })
             .def_static(
-                    "create_from_point_cloud_correspondences",
-                    &geometry::LineSet<Dim>::template CreateFromPointCloudCorrespondences<Dim>,
-                    "Factory function to create a LineSet from two "
-                    "pointclouds and a correspondence set.",
-                    "cloud0"_a, "cloud1"_a, "correspondences"_a)
+                "create_from_point_cloud_correspondences",
+                [] (const geometry::PointCloud& cloud0, const geometry::PointCloud& cloud1, const wrapper::device_vector_wrapper<thrust::pair<int, int>>& correspondences) {
+                    auto out = std::make_shared<geometry::LineSet<Dim>>();
+                    if constexpr (Dim == 3) {
+                        cupoch_lineset3_assign_from_correspondences(out.get(), &cloud0, &cloud1, &correspondences);
+                    } else {
+                        cupoch_lineset2_assign_from_correspondences(out.get(), &cloud0, &cloud1, &correspondences);
+                    }
+                    return out;
+                })
             .def_static("create_from_oriented_bounding_box",
                         &geometry::LineSet<Dim>::template CreateFromOrientedBoundingBox<Dim>,
                         "Factory function to create a LineSet from an "
@@ -98,37 +201,58 @@ void bind_def(LineSetT& lineset) {
             .def_property(
                     "points",
                     [](geometry::LineSet<Dim> &line) {
-                        return wrapper::device_vector_wrapper<Eigen::Matrix<float, Dim, 1>>(line.points_);
+                        if constexpr (Dim == 3) {
+                            std::unique_ptr<wrapper::device_vector_wrapper<Eigen::Matrix<float, Dim, 1>>>
+                                tmp(cupoch_lineset3_get_points(&line));
+                            return std::move(*tmp);
+                        } else {
+                            std::unique_ptr<wrapper::device_vector_wrapper<Eigen::Matrix<float, Dim, 1>>>
+                                tmp(cupoch_lineset2_get_points(&line));
+                            return std::move(*tmp);
+                        }
                     },
                     [](geometry::LineSet<Dim> &line,
                        const wrapper::device_vector_wrapper<Eigen::Matrix<float, Dim, 1>> &vec) {
-                        wrapper::FromWrapper(line.points_, vec);
+                        if constexpr (Dim == 3) cupoch_lineset3_set_points(&line, &vec);
+                        else                    cupoch_lineset2_set_points(&line, &vec);
                     })
             .def_property(
                     "lines",
                     [](geometry::LineSet<Dim> &line) {
-                        return wrapper::device_vector_vector2i(line.lines_);
+                        if constexpr (Dim == 3) {
+                            std::unique_ptr<wrapper::device_vector_vector2i> tmp(cupoch_lineset3_get_lines(&line));
+                            return std::move(*tmp);
+                        } else {
+                            std::unique_ptr<wrapper::device_vector_vector2i> tmp(cupoch_lineset2_get_lines(&line));
+                            return std::move(*tmp);
+                        }
                     },
-                    [](geometry::LineSet<Dim> &line,
-                       const wrapper::device_vector_vector2i &vec) {
-                        wrapper::FromWrapper(line.lines_, vec);
+                    [](geometry::LineSet<Dim> &line, const wrapper::device_vector_vector2i &vec) {
+                        if constexpr (Dim == 3) cupoch_lineset3_set_lines(&line, &vec);
+                        else                    cupoch_lineset2_set_lines(&line, &vec);
                     })
             .def_property(
                     "colors",
                     [](geometry::LineSet<Dim> &line) {
-                        return wrapper::device_vector_vector3f(line.colors_);
+                        if constexpr (Dim == 3) {
+                            std::unique_ptr<wrapper::device_vector_vector3f> tmp(cupoch_lineset3_get_colors(&line));
+                            return std::move(*tmp);
+                        } else {
+                            std::unique_ptr<wrapper::device_vector_vector3f> tmp(cupoch_lineset2_get_colors(&line));
+                            return std::move(*tmp);
+                        }
                     },
-                    [](geometry::LineSet<Dim> &line,
-                       const wrapper::device_vector_vector3f &vec) {
-                        wrapper::FromWrapper(line.colors_, vec);
+                    [](geometry::LineSet<Dim> &line, const wrapper::device_vector_vector3f &vec) {
+                        if constexpr (Dim == 3) cupoch_lineset3_set_colors(&line, &vec);
+                        else                    cupoch_lineset2_set_colors(&line, &vec);
                     })
             .def("to_lines_dlpack",
                  [](geometry::LineSet<Dim> &line) {
-                     return dlpack::ToDLpackCapsule<Eigen::Vector2i>(line.lines_);
+                     return LineSetDLPackBridge<Dim>::ToLinesDLpack(line);
                  })
             .def("from_lines_dlpack",
                  [](geometry::LineSet<Dim> &line, py::capsule dlpack) {
-                     dlpack::FromDLpackCapsule<Eigen::Vector2i>(dlpack, line.lines_);
+                     LineSetDLPackBridge<Dim>::FromLinesDLpack(line, dlpack);
                  });
 }
 

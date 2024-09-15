@@ -26,7 +26,64 @@
 
 using namespace cupoch;
 
+extern "C" {
+cupoch::wrapper::device_vector_vector33f *cupoch_feature33_get_data(
+        cupoch::registration::Feature<33> *feature);
+void cupoch_feature33_set_data(
+        cupoch::registration::Feature<33> *feature,
+        const cupoch::wrapper::device_vector_vector33f *data);
+cupoch::wrapper::device_vector_vector352f *cupoch_feature352_get_data(
+        cupoch::registration::Feature<352> *feature);
+void cupoch_feature352_set_data(
+        cupoch::registration::Feature<352> *feature,
+        const cupoch::wrapper::device_vector_vector352f *data);
+}
+
 namespace {
+
+template <int Dim>
+struct FeatureBridge;
+
+template <>
+struct FeatureBridge<33> {
+    static wrapper::device_vector_wrapper<Eigen::Matrix<float, 33, 1>> GetData(
+            registration::Feature<33> &feature) {
+        std::unique_ptr<wrapper::device_vector_vector33f> data(
+                cupoch_feature33_get_data(&feature));
+        return std::move(*data);
+    }
+
+    static void SetData(
+            registration::Feature<33> &feature,
+            const wrapper::device_vector_wrapper<Eigen::Matrix<float, 33, 1>>
+                    &data) {
+        cupoch_feature33_set_data(
+                &feature,
+                reinterpret_cast<const wrapper::device_vector_vector33f *>(
+                        &data));
+    }
+};
+
+template <>
+struct FeatureBridge<352> {
+    static wrapper::device_vector_wrapper<Eigen::Matrix<float, 352, 1>>
+    GetData(registration::Feature<352> &feature) {
+        std::unique_ptr<wrapper::device_vector_vector352f> data(
+                cupoch_feature352_get_data(&feature));
+        return std::move(*data);
+    }
+
+    static void SetData(
+            registration::Feature<352> &feature,
+            const wrapper::device_vector_wrapper<Eigen::Matrix<float, 352, 1>>
+                    &data) {
+        cupoch_feature352_set_data(
+                &feature,
+                reinterpret_cast<const wrapper::device_vector_vector352f *>(
+                        &data));
+    }
+};
+
 template <class FeatureT, int Dim>
 void bind_def(FeatureT& feature) {
     py::detail::bind_default_constructor<registration::Feature<Dim>>(feature);
@@ -40,11 +97,11 @@ void bind_def(FeatureT& feature) {
             .def_property(
                     "data",
                     [](registration::Feature<Dim> &ft) {
-                        return wrapper::device_vector_wrapper<Eigen::Matrix<float, Dim, 1>>(ft.data_);
+                        return FeatureBridge<Dim>::GetData(ft);
                     },
                     [](registration::Feature<Dim> &ft,
                        const wrapper::device_vector_wrapper<Eigen::Matrix<float, Dim, 1>> &vec) {
-                        wrapper::FromWrapper(ft.data_, vec);
+                        FeatureBridge<Dim>::SetData(ft, vec);
                     },
                     "``33 x n`` float64 numpy array: Data buffer "
                     "storing features.")
