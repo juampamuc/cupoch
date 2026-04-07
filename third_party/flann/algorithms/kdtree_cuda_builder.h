@@ -498,11 +498,11 @@ public:
 
         // create sorted index list -> can be used to compute AABBs in O(1)
         thrust::copy(points_x_->begin(), points_x_->end(), tmpv.begin());
-        thrust::sort_by_key( exec_policy(0)->on(0), tmpv.begin(), tmpv.end(), index_x_->begin() );
+        thrust::sort_by_key( exec_policy(0), tmpv.begin(), tmpv.end(), index_x_->begin() );
         thrust::copy(points_y_->begin(), points_y_->end(), tmpv.begin());
-        thrust::sort_by_key( exec_policy(0)->on(0), tmpv.begin(), tmpv.end(), index_y_->begin() );
+        thrust::sort_by_key( exec_policy(0), tmpv.begin(), tmpv.end(), index_y_->begin() );
         thrust::copy(points_z_->begin(), points_z_->end(), tmpv.begin());
-        thrust::sort_by_key( exec_policy(0)->on(0), tmpv.begin(), tmpv.end(), index_z_->begin() );
+        thrust::sort_by_key( exec_policy(0), tmpv.begin(), tmpv.end(), index_z_->begin() );
 
 
         (*aabb_min_)[0]=make_float4((*points_x_)[(*index_x_)[0]],(*points_y_)[(*index_y_)[0]],(*points_z_)[(*index_z_)[0]],0);
@@ -618,7 +618,7 @@ protected:
 		// assume: points of each node are continuous in the array
 		
 		// find which nodes are here, and where each node's points begin and end
-        int unique_labels = thrust::unique_by_key_copy( exec_policy(0)->on(0), owners.begin(), owners.end(), thrust::counting_iterator<int>(0), labelsUnique->begin(), countsUnique->begin()).first - labelsUnique->begin();
+        int unique_labels = thrust::unique_by_key_copy( exec_policy(0), owners.begin(), owners.end(), thrust::counting_iterator<int>(0), labelsUnique->begin(), countsUnique->begin()).first - labelsUnique->begin();
 
 		// update the info
         cuda::kd_tree_builder_detail::SetLeftAndRightAndAABB s;
@@ -652,7 +652,7 @@ protected:
         device_vector<int>* f_tmp = &val_out;
         device_vector<int>* addr_tmp = tmp_misc_;
 
-        thrust::exclusive_scan( exec_policy(0)->on(0),
+        thrust::exclusive_scan( exec_policy(0),
                                 /*thrust::make_transform_iterator(*/ left_right_marks.begin() /*,cuda::kd_tree_builder_detail::IsEven*/
                                 /*())*/, /*thrust::make_transform_iterator(*/ left_right_marks.end() /*,cuda::kd_tree_builder_detail::IsEven*/
                                 /*())*/,     f_tmp->begin() );

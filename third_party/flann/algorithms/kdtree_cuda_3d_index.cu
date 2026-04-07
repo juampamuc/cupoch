@@ -465,7 +465,7 @@ int KDTreeCuda3dIndex< Distance >::radiusSearchGpu(const Matrix<ElementType>& qu
                                                                                   distance
                                                                                   );
             thrust::copy( indicesDev.begin(), indicesDev.end(), indices.ptr() );
-            return thrust::reduce(exec_policy(0)->on(0), indicesDev.begin(), indicesDev.end() );
+            return thrust::reduce(exec_policy(0), indicesDev.begin(), indicesDev.end() );
         }
 
 
@@ -533,7 +533,7 @@ int KDTreeCuda3dIndex< Distance >::radiusSearchGpu(const Matrix<ElementType>& qu
                                                                                   distance
                                                                                   );
             thrust::copy( indicesDev.begin(), indicesDev.end(), indices.ptr() );
-            return thrust::reduce(exec_policy(0)->on(0), indicesDev.begin(), indicesDev.end() );
+            return thrust::reduce(exec_policy(0), indicesDev.begin(), indicesDev.end() );
         }
 
         if( use_heap ) {

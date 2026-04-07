@@ -181,6 +181,8 @@ set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}
     -Xcudafe "--diag_suppress=virtual_function_decl_hidden")
 if (USE_RMM)
     add_definitions(-DUSE_RMM)
+    add_definitions(-DLIBCUDACXX_ENABLE_EXPERIMENTAL_MEMORY_RESOURCE)
+    set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -DLIBCUDACXX_ENABLE_EXPERIMENTAL_MEMORY_RESOURCE)
 endif ()
 
 # 3rd-party projects that are added with external_project_add will be installed
