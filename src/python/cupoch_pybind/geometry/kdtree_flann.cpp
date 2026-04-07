@@ -27,6 +27,31 @@
 
 using namespace cupoch;
 
+extern "C" {
+bool cupoch_kdtreeflann_set_geometry(
+        cupoch::knn::KDTreeFlann *tree,
+        const cupoch::geometry::Geometry *geometry);
+int cupoch_kdtreeflann_search(
+        const cupoch::knn::KDTreeFlann *tree,
+        const Eigen::Vector3f *query,
+        const cupoch::knn::KDTreeSearchParam *param,
+        std::vector<int> *indices,
+        std::vector<float> *distance2);
+int cupoch_kdtreeflann_search_knn(
+        const cupoch::knn::KDTreeFlann *tree,
+        const Eigen::Vector3f *query,
+        int knn_value,
+        std::vector<int> *indices,
+        std::vector<float> *distance2);
+int cupoch_kdtreeflann_search_radius(
+        const cupoch::knn::KDTreeFlann *tree,
+        const Eigen::Vector3f *query,
+        float radius,
+        int max_nn,
+        std::vector<int> *indices,
+        std::vector<float> *distance2);
+}
+
 void pybind_kdtreeflann(py::module &m) {
     // cupoch.geometry.KDTreeSearchParam
     py::class_<knn::KDTreeSearchParam> kdtreesearchparam(
@@ -95,19 +120,23 @@ void pybind_kdtreeflann(py::module &m) {
                         "KDTree with FLANN for nearest neighbor search.");
     kdtreeflann.def(py::init<>())
             .def(py::init([](const geometry::Geometry& geometry) {
-                    return std::unique_ptr<knn::KDTreeFlann>(new knn::KDTreeFlann(geometry::ConvertVector3fVectorRef(geometry)));
+                    auto tree = std::unique_ptr<knn::KDTreeFlann>(
+                            new knn::KDTreeFlann());
+                    cupoch_kdtreeflann_set_geometry(tree.get(), &geometry);
+                    return tree;
                 }), "geometry"_a)
             .def("set_geometry", [](knn::KDTreeFlann& self, const geometry::Geometry& geometry) {
-                    self.SetRawData(geometry::ConvertVector3fVectorRef(geometry));
+                    return cupoch_kdtreeflann_set_geometry(&self, &geometry);
                  }, "geometry"_a)
             .def(
                     "search_vector_3f",
                     [](const knn::KDTreeFlann &tree,
                        const Eigen::Vector3f &query,
                        const knn::KDTreeSearchParam &param) {
-                        thrust::host_vector<int> indices;
-                        thrust::host_vector<float> distance2;
-                        int k = tree.Search(query, param, indices, distance2);
+                        std::vector<int> indices;
+                        std::vector<float> distance2;
+                        int k = cupoch_kdtreeflann_search(
+                                &tree, &query, &param, &indices, &distance2);
                         if (k < 0)
                             throw std::runtime_error(
                                     "search_vector_3f() error!");
@@ -118,9 +147,10 @@ void pybind_kdtreeflann(py::module &m) {
                     "search_knn_vector_3f",
                     [](const knn::KDTreeFlann &tree,
                        const Eigen::Vector3f &query, int knn) {
-                        thrust::host_vector<int> indices;
-                        thrust::host_vector<float> distance2;
-                        int k = tree.SearchKNN(query, knn, indices, distance2);
+                        std::vector<int> indices;
+                        std::vector<float> distance2;
+                        int k = cupoch_kdtreeflann_search_knn(
+                                &tree, &query, knn, &indices, &distance2);
                         if (k < 0)
                             throw std::runtime_error(
                                     "search_knn_vector_3f() error!");
@@ -131,10 +161,11 @@ void pybind_kdtreeflann(py::module &m) {
                     "search_radius_vector_3f",
                     [](const knn::KDTreeFlann &tree,
                        const Eigen::Vector3f &query, float radius, int max_nn) {
-                        thrust::host_vector<int> indices;
-                        thrust::host_vector<float> distance2;
-                        int k = tree.SearchRadius(query, radius, max_nn,
-                                                  indices, distance2);
+                        std::vector<int> indices;
+                        std::vector<float> distance2;
+                        int k = cupoch_kdtreeflann_search_radius(
+                                &tree, &query, radius, max_nn, &indices,
+                                &distance2);
                         if (k < 0)
                             throw std::runtime_error(
                                     "search_radius_vector_3f() error!");

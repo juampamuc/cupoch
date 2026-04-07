@@ -25,11 +25,19 @@
 #include <rmm/device_vector.hpp>
 #include <rmm/device_uvector.hpp>
 
+#if __has_include(<rmm/mr/cuda_memory_resource.hpp>)
+#include <rmm/mr/cuda_memory_resource.hpp>
+#include <rmm/mr/managed_memory_resource.hpp>
+#include <rmm/mr/pool_memory_resource.hpp>
+#include <rmm/mr/thrust_allocator_adaptor.hpp>
+#include <rmm/mr/owning_wrapper.hpp>
+#else
 #include <rmm/mr/device/cuda_memory_resource.hpp>
 #include <rmm/mr/device/managed_memory_resource.hpp>
 #include <rmm/mr/device/pool_memory_resource.hpp>
 #include <rmm/mr/device/thrust_allocator_adaptor.hpp>
 #include <rmm/mr/device/owning_wrapper.hpp>
+#endif
 #else
 #include <thrust/device_vector.h>
 #endif

@@ -28,6 +28,19 @@
 
 using namespace cupoch;
 
+extern "C" {
+void cupoch_compute_iss_keypoints_bridge(
+        const cupoch::geometry::PointCloud *input,
+        float salient_radius,
+        float non_max_radius,
+        float gamma_21,
+        float gamma_32,
+        int min_neighbors,
+        int max_neighbors,
+        cupoch::geometry::PointCloud **keypoints,
+        cupoch::wrapper::device_vector_bool **mask);
+}
+
 void pybind_keypoint_methods(py::module &m) {
     m.def("compute_iss_keypoints", [] (
               const geometry::PointCloud& input,
@@ -37,8 +50,16 @@ void pybind_keypoint_methods(py::module &m) {
               float gamma_32,
               int min_neighbors,
               int max_neighbors) {
-              auto res = geometry::keypoint::ComputeISSKeypoints(input, salient_radius, non_max_radius, gamma_21, gamma_32, min_neighbors, max_neighbors);
-              return std::make_tuple(std::get<0>(res), wrapper::device_vector_bool(*std::get<1>(res)));
+              geometry::PointCloud *keypoints = nullptr;
+              wrapper::device_vector_bool *mask = nullptr;
+              cupoch_compute_iss_keypoints_bridge(
+                      &input, salient_radius, non_max_radius, gamma_21,
+                      gamma_32, min_neighbors, max_neighbors, &keypoints,
+                      &mask);
+              return std::make_tuple(
+                      std::shared_ptr<geometry::PointCloud>(keypoints),
+                      std::move(*std::unique_ptr<wrapper::device_vector_bool>(
+                              mask)));
           },
           "Function that computes the ISS keypoints from an input point "
           "cloud. This implements the keypoint detection modules "

@@ -28,6 +28,25 @@
 
 using namespace cupoch;
 
+extern "C" {
+void cupoch_laserscanbuffer_add_ranges_device(
+        cupoch::geometry::LaserScanBuffer *scan,
+        const cupoch::wrapper::device_vector_float *ranges,
+        const Eigen::Matrix4f *transformation,
+        const cupoch::wrapper::device_vector_float *intensities);
+void cupoch_laserscanbuffer_add_ranges_host(
+        cupoch::geometry::LaserScanBuffer *scan,
+        const float *ranges,
+        size_t num_ranges,
+        const Eigen::Matrix4f *transformation,
+        const float *intensities,
+        size_t num_intensities);
+cupoch::wrapper::device_vector_float *cupoch_laserscanbuffer_get_ranges(
+        cupoch::geometry::LaserScanBuffer *scan);
+cupoch::wrapper::device_vector_float *cupoch_laserscanbuffer_get_intensities(
+        cupoch::geometry::LaserScanBuffer *scan);
+}
+
 void pybind_laserscanbuffer(py::module &m) {
     py::class_<geometry::LaserScanBuffer, PyGeometry3D<geometry::LaserScanBuffer>,
                std::shared_ptr<geometry::LaserScanBuffer>, geometry::GeometryBase3D>
@@ -41,27 +60,46 @@ void pybind_laserscanbuffer(py::module &m) {
              .def("add_ranges", [](geometry::LaserScanBuffer &self,
                                    const wrapper::device_vector_float &ranges,
                                    const Eigen::Matrix4f &transformation,
-                                   const wrapper::device_vector_float &intensities) {
-                                       return self.AddRanges(ranges.data_, transformation, intensities.data_);
+                                   py::object intensities_obj) -> geometry::LaserScanBuffer& {
+                                       const wrapper::device_vector_float *intensities = nullptr;
+                                       if (!intensities_obj.is_none()) {
+                                           intensities = &py::cast<const wrapper::device_vector_float &>(
+                                                   intensities_obj);
+                                       }
+                                       cupoch_laserscanbuffer_add_ranges_device(
+                                               &self, &ranges, &transformation,
+                                               intensities);
+                                       return self;
                                    },
                   "Add single scan ranges",
                   py::arg("ranges"),
                   py::arg("transformation") = Eigen::Matrix4f::Identity(),
-                  py::arg("intensities") = wrapper::device_vector_float())
+                  py::arg("intensities") = py::none())
              .def("add_host_ranges", [](geometry::LaserScanBuffer &self,
                                         const cupoch::utility::pinned_host_vector<float> &ranges,
                                         const Eigen::Matrix4f &transformation,
-                                        const cupoch::utility::pinned_host_vector<float> &intensities) {
-                                            return self.AddRanges(
-                                                wrapper::device_vector_float(ranges).data_,
-                                                transformation,
-                                                wrapper::device_vector_float(intensities).data_
-                                            );
+                                        py::object intensities_obj) -> geometry::LaserScanBuffer& {
+                                            const auto *intensity_data = static_cast<const float *>(nullptr);
+                                            size_t intensity_size = 0;
+                                            if (!intensities_obj.is_none()) {
+                                                const auto &intensities =
+                                                        py::cast<const cupoch::utility::pinned_host_vector<float> &>(
+                                                                intensities_obj);
+                                                intensity_data = intensities.data();
+                                                intensity_size = intensities.size();
+                                            }
+                                            cupoch_laserscanbuffer_add_ranges_host(
+                                                    &self, ranges.data(),
+                                                    ranges.size(),
+                                                    &transformation,
+                                                    intensity_data,
+                                                    intensity_size);
+                                            return self;
                                         },
                   "Add host single scan ranges",
                   py::arg("ranges"),
                   py::arg("transformation") = Eigen::Matrix4f::Identity(),
-                  py::arg("intensities") = cupoch::utility::pinned_host_vector<float>())
+                  py::arg("intensities") = py::none())
              .def("merge", &geometry::LaserScanBuffer::Merge,
                   "Merge other LaserScanBuffer into this one")
              .def("pop_one_scan", &geometry::LaserScanBuffer::PopOneScan,
@@ -112,11 +150,15 @@ void pybind_laserscanbuffer(py::module &m) {
             .def_property_readonly(
                     "ranges",
                     [](geometry::LaserScanBuffer &scan) {
-                        return wrapper::device_vector_float(scan.ranges_);
+                        std::unique_ptr<wrapper::device_vector_float> ranges(
+                                cupoch_laserscanbuffer_get_ranges(&scan));
+                        return std::move(*ranges);
                     })
             .def_property_readonly(
                     "intensities",
                     [](geometry::LaserScanBuffer &scan) {
-                        return wrapper::device_vector_float(scan.intensities_);
+                        std::unique_ptr<wrapper::device_vector_float> intensities(
+                                cupoch_laserscanbuffer_get_intensities(&scan));
+                        return std::move(*intensities);
                     });
 }

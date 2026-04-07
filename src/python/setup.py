@@ -79,7 +79,7 @@ setup(
     packages=[
         'cupoch',
     ],
-    packages_data=find_stubs("cupoch-stubs"),
+    package_data=find_stubs("cupoch-stubs"),
     url="@PROJECT_HOME@",
     project_urls={
         'Documentation': '@PROJECT_DOCS@',

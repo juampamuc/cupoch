@@ -20,17 +20,48 @@
  **/
 #include <thrust/tabulate.h>
 #include <thrust/async/reduce.h>
-#include <thrust/inner_product.h>
 #include <thrust/iterator/permutation_iterator.h>
+#include <thrust/iterator/zip_iterator.h>
+#include <thrust/transform_reduce.h>
 
 #include <Eigen/Geometry>
 #include <Eigen/SVD>
 
 #include "cupoch/registration/kabsch.h"
+#include "cupoch/utility/helper.h"
 #include "cupoch/utility/platform.h"
 
 using namespace cupoch;
 using namespace cupoch::registration;
+
+namespace {
+
+template <typename T>
+struct sum_functor {
+    __host__ __device__ T operator()(const T &lhs, const T &rhs) const {
+        T sum = lhs;
+        sum += rhs;
+        return sum;
+    }
+};
+
+struct centralized_outer_product_functor {
+    Eigen::Vector3f model_center;
+    Eigen::Vector3f target_center;
+
+    template <typename Tuple>
+    __host__ __device__ Eigen::Matrix3f operator()(const Tuple &points) const {
+        const Eigen::Vector3f model_point = thrust::get<0>(points);
+        const Eigen::Vector3f target_point = thrust::get<1>(points);
+        const Eigen::Vector3f centralized_model =
+                model_point - model_center;
+        const Eigen::Vector3f centralized_target =
+                target_point - target_center;
+        return centralized_model * centralized_target.transpose();
+    }
+};
+
+}  // namespace
 
 Eigen::Matrix4f_u cupoch::registration::Kabsch(const utility::device_vector<Eigen::Vector3f> &model,
                          const utility::device_vector<Eigen::Vector3f> &target,
@@ -80,28 +111,30 @@ Eigen::Matrix4f_u cupoch::registration::Kabsch(
     // Centralize them
     // Compute the H matrix
     const Eigen::Matrix3f init = Eigen::Matrix3f::Zero();
-    Eigen::Matrix3f hh = thrust::inner_product(
+    auto model_begin = thrust::make_permutation_iterator(
+            model.begin(),
+            thrust::make_transform_iterator(
+                    corres.begin(), element_get_functor<Eigen::Vector2i, 0>()));
+    auto model_end = thrust::make_permutation_iterator(
+            model.begin(),
+            thrust::make_transform_iterator(
+                    corres.end(), element_get_functor<Eigen::Vector2i, 0>()));
+    auto target_begin = thrust::make_permutation_iterator(
+            target.begin(),
+            thrust::make_transform_iterator(
+                    corres.begin(), element_get_functor<Eigen::Vector2i, 1>()));
+    auto target_end = thrust::make_permutation_iterator(
+            target.begin(),
+            thrust::make_transform_iterator(
+                    corres.end(), element_get_functor<Eigen::Vector2i, 1>()));
+    Eigen::Matrix3f hh = thrust::transform_reduce(
             utility::exec_policy(stream1),
-            thrust::make_permutation_iterator(
-                    model.begin(),
-                    thrust::make_transform_iterator(
-                            corres.begin(),
-                            element_get_functor<Eigen::Vector2i, 0>())),
-            thrust::make_permutation_iterator(
-                    model.begin(),
-                    thrust::make_transform_iterator(
-                            corres.end(),
-                            element_get_functor<Eigen::Vector2i, 0>())),
-            thrust::make_permutation_iterator(
-                    target.begin(),
-                    thrust::make_transform_iterator(
-                            corres.begin(),
-                            element_get_functor<Eigen::Vector2i, 1>())),
-            init, thrust::plus<Eigen::Matrix3f>(),
-            [model_center, target_center] __device__(
-                    const Eigen::Vector3f &lhs, const Eigen::Vector3f &rhs) {
-                return (lhs - model_center) * (rhs - target_center).transpose();
-            });
+            thrust::make_zip_iterator(
+                    thrust::make_tuple(model_begin, target_begin)),
+            thrust::make_zip_iterator(
+                    thrust::make_tuple(model_end, target_end)),
+            centralized_outer_product_functor{model_center, target_center},
+            init, sum_functor<Eigen::Matrix3f>());
 
     // Do svd
     hh /= model.size();
@@ -133,6 +166,13 @@ Eigen::Matrix4f_u cupoch::registration::Kabsch(
         return Eigen::Vector2i(idx, idx);
     });
     return Kabsch(stream1, stream2, model, target, corres);
+}
+
+Eigen::Matrix4f_u cupoch::registration::Kabsch(
+        const std::vector<Eigen::Vector3f> &model,
+        const std::vector<Eigen::Vector3f> &target) {
+    return Kabsch(utility::device_vector<Eigen::Vector3f>(model),
+                  utility::device_vector<Eigen::Vector3f>(target));
 }
 
 Eigen::Matrix4f_u cupoch::registration::KabschWeighted(
@@ -183,7 +223,7 @@ Eigen::Matrix4f_u cupoch::registration::KabschWeighted(
                 const float w = thrust::get<2>(x);
                 return w * w * centralized_x * centralized_y.transpose();
             },
-            init, thrust::plus<Eigen::Matrix3f>());
+            init, sum_functor<Eigen::Matrix3f>());
 
     // Do svd
     hh /= h_weight;

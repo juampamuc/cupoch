@@ -31,6 +31,11 @@
 
 using namespace cupoch;
 
+extern "C" {
+cupoch::wrapper::device_vector_occupancyvoxel *cupoch_occupancygrid_get_voxels(
+        const cupoch::geometry::OccupancyGrid *occupancygrid);
+}
+
 void pybind_occupanygrid(py::module &m) {
     py::class_<geometry::OccupancyVoxel,
                std::shared_ptr<geometry::OccupancyVoxel>>
@@ -97,7 +102,12 @@ void pybind_occupanygrid(py::module &m) {
                  })
             .def_property_readonly("voxels",
                                    [](const geometry::OccupancyGrid &og) {
-                                       return wrapper::device_vector_occupancyvoxel(*og.ExtractKnownVoxels());
+                                       std::unique_ptr<
+                                               wrapper::device_vector_occupancyvoxel>
+                                               voxels(
+                                                       cupoch_occupancygrid_get_voxels(
+                                                               &og));
+                                       return std::move(*voxels);
                                    })
             .def("reconstruct", &geometry::OccupancyGrid::Reconstruct,
                  "Reconstruct dense voxel grid.")

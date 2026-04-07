@@ -64,9 +64,15 @@ endif ()
 
 set(flann_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR})
 
+if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/rmm/include")
+    set(rmm_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/rmm/include)
+elseif (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/rmm/cpp/include")
+    set(rmm_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/rmm/cpp/include)
+endif ()
+
 file(GLOB_RECURSE CU_SOURCES flann/*.cu)
 cuda_add_library(flann_cuda_s STATIC ${CU_SOURCES})
-target_include_directories(flann_cuda_s PRIVATE ${flann_INCLUDE_DIRS} rmm/include spdlog/include)
+target_include_directories(flann_cuda_s PRIVATE ${flann_INCLUDE_DIRS} ${rmm_INCLUDE_DIRS} spdlog/include)
 target_compile_definitions(flann_cuda_s PRIVATE -DFLANN_USE_CUDA)
 set(FLANN_LIBRARIES flann_cuda_s)
 
@@ -235,7 +241,6 @@ set(rply_LIBRARIES rply)
 set(dlpack_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/dlpack/include)
 
 # rmm
-set(rmm_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/rmm/include)
 
 # imgui
 add_library(imgui STATIC imgui/imgui.cpp

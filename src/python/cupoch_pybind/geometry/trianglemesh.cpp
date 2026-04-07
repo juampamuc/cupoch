@@ -23,12 +23,55 @@
 #include "cupoch/geometry/image.h"
 #include "cupoch/geometry/pointcloud.h"
 #include "cupoch/utility/console.h"
-#include "cupoch_pybind/dl_converter.h"
+#include "cupoch_pybind/dlpack_utils.h"
 #include "cupoch_pybind/docstring.h"
 #include "cupoch_pybind/geometry/geometry.h"
 #include "cupoch_pybind/geometry/geometry_trampoline.h"
 
 using namespace cupoch;
+
+extern "C" {
+cupoch::wrapper::device_vector_vector3f *cupoch_meshbase_get_vertices(
+        cupoch::geometry::MeshBase *mesh);
+void cupoch_meshbase_set_vertices(
+        cupoch::geometry::MeshBase *mesh,
+        const cupoch::wrapper::device_vector_vector3f *vertices);
+void *cupoch_meshbase_vertices_to_dlpack(cupoch::geometry::MeshBase *mesh);
+void cupoch_meshbase_vertices_from_dlpack(
+        cupoch::geometry::MeshBase *mesh,
+        const DLManagedTensor *managed);
+void *cupoch_meshbase_vertex_normals_to_dlpack(
+        cupoch::geometry::MeshBase *mesh);
+void cupoch_meshbase_vertex_normals_from_dlpack(
+        cupoch::geometry::MeshBase *mesh,
+        const DLManagedTensor *managed);
+void *cupoch_meshbase_vertex_colors_to_dlpack(
+        cupoch::geometry::MeshBase *mesh);
+void cupoch_meshbase_vertex_colors_from_dlpack(
+        cupoch::geometry::MeshBase *mesh,
+        const DLManagedTensor *managed);
+cupoch::wrapper::device_vector_vector3i *cupoch_trianglemesh_get_triangles(
+        cupoch::geometry::TriangleMesh *mesh);
+void cupoch_trianglemesh_set_triangles(
+        cupoch::geometry::TriangleMesh *mesh,
+        const cupoch::wrapper::device_vector_vector3i *triangles);
+cupoch::wrapper::device_vector_vector3f *
+cupoch_trianglemesh_get_triangle_normals(
+        cupoch::geometry::TriangleMesh *mesh);
+void cupoch_trianglemesh_set_triangle_normals(
+        cupoch::geometry::TriangleMesh *mesh,
+        const cupoch::wrapper::device_vector_vector3f *normals);
+cupoch::wrapper::device_vector_vector2i *cupoch_trianglemesh_get_edge_list(
+        cupoch::geometry::TriangleMesh *mesh);
+void cupoch_trianglemesh_set_edge_list(
+        cupoch::geometry::TriangleMesh *mesh,
+        const cupoch::wrapper::device_vector_vector2i *edge_list);
+cupoch::wrapper::device_vector_vector2f *cupoch_trianglemesh_get_triangle_uvs(
+        cupoch::geometry::TriangleMesh *mesh);
+void cupoch_trianglemesh_set_triangle_uvs(
+        cupoch::geometry::TriangleMesh *mesh,
+        const cupoch::wrapper::device_vector_vector2f *triangle_uvs);
+}
 
 void pybind_trianglemesh(py::module &m) {
     py::class_<geometry::TriangleMesh, PyGeometry3D<geometry::TriangleMesh>,
@@ -43,9 +86,11 @@ void pybind_trianglemesh(py::module &m) {
     trianglemesh
             .def(py::init([](const wrapper::device_vector_vector3f &vertices,
                              const wrapper::device_vector_vector3i &triangles) {
-                     return std::unique_ptr<geometry::TriangleMesh>(
-                             new geometry::TriangleMesh(vertices.data_,
-                                                        triangles.data_));
+                     auto mesh = std::unique_ptr<geometry::TriangleMesh>(
+                             new geometry::TriangleMesh());
+                     cupoch_meshbase_set_vertices(mesh.get(), &vertices);
+                     cupoch_trianglemesh_set_triangles(mesh.get(), &triangles);
+                     return mesh;
                  }),
                  "Create a triangle mesh from vertices and triangle indices",
                  "vertices"_a, "triangles"_a)
@@ -245,66 +290,85 @@ void pybind_trianglemesh(py::module &m) {
             .def_property(
                     "triangles",
                     [](geometry::TriangleMesh &mesh) {
-                        return wrapper::device_vector_vector3i(mesh.triangles_);
+                        std::unique_ptr<wrapper::device_vector_vector3i>
+                                triangles(cupoch_trianglemesh_get_triangles(
+                                        &mesh));
+                        return std::move(*triangles);
                     },
                     [](geometry::TriangleMesh &mesh,
                        const wrapper::device_vector_vector3i &vec) {
-                        wrapper::FromWrapper(mesh.triangles_, vec);
+                        cupoch_trianglemesh_set_triangles(&mesh, &vec);
                     })
             .def_property(
                     "triangle_normals",
                     [](geometry::TriangleMesh &mesh) {
-                        return wrapper::device_vector_vector3f(
-                                mesh.triangle_normals_);
+                        std::unique_ptr<wrapper::device_vector_vector3f>
+                                normals(
+                                        cupoch_trianglemesh_get_triangle_normals(
+                                                &mesh));
+                        return std::move(*normals);
                     },
                     [](geometry::TriangleMesh &mesh,
                        const wrapper::device_vector_vector3f &vec) {
-                        wrapper::FromWrapper(mesh.triangle_normals_, vec);
+                        cupoch_trianglemesh_set_triangle_normals(&mesh, &vec);
                     })
             .def_property(
                     "edge_list",
                     [](geometry::TriangleMesh &mesh) {
-                        return wrapper::device_vector_vector2i(mesh.edge_list_);
+                        std::unique_ptr<wrapper::device_vector_vector2i>
+                                edge_list(
+                                        cupoch_trianglemesh_get_edge_list(
+                                                &mesh));
+                        return std::move(*edge_list);
                     },
                     [](geometry::TriangleMesh &mesh,
                        const wrapper::device_vector_vector2i &vec) {
-                        wrapper::FromWrapper(mesh.edge_list_, vec);
+                        cupoch_trianglemesh_set_edge_list(&mesh, &vec);
                     })
             .def_property(
                     "triangle_uvs",
                     [](geometry::TriangleMesh &mesh) {
-                        return wrapper::device_vector_vector2f(
-                                mesh.triangle_uvs_);
+                        std::unique_ptr<wrapper::device_vector_vector2f>
+                                triangle_uvs(
+                                        cupoch_trianglemesh_get_triangle_uvs(
+                                                &mesh));
+                        return std::move(*triangle_uvs);
                     },
                     [](geometry::TriangleMesh &mesh,
                        const wrapper::device_vector_vector2f &vec) {
-                        wrapper::FromWrapper(mesh.triangle_uvs_, vec);
+                        cupoch_trianglemesh_set_triangle_uvs(&mesh, &vec);
                     })
             .def_readwrite("texture", &geometry::TriangleMesh::texture_,
                            "cupoch.geometry.Image: The texture image.")
             .def("to_vertices_dlpack",
                  [](geometry::TriangleMesh &mesh) {
-                     return dlpack::ToDLpackCapsule<Eigen::Vector3f>(mesh.vertices_);
+                     return pybind::MakeDLpackCapsule(
+                             cupoch_meshbase_vertices_to_dlpack(&mesh));
                  })
             .def("to_vertex_normals_dlpack",
                  [](geometry::TriangleMesh &mesh) {
-                     return dlpack::ToDLpackCapsule<Eigen::Vector3f>(mesh.vertex_normals_);
+                     return pybind::MakeDLpackCapsule(
+                             cupoch_meshbase_vertex_normals_to_dlpack(&mesh));
                  })
             .def("to_vertex_colors_dlpack",
                  [](geometry::TriangleMesh &mesh) {
-                     return dlpack::ToDLpackCapsule<Eigen::Vector3f>(mesh.vertex_colors_);
+                     return pybind::MakeDLpackCapsule(
+                             cupoch_meshbase_vertex_colors_to_dlpack(&mesh));
                  })
             .def("from_vertices_dlpack",
                  [](geometry::TriangleMesh &mesh, py::capsule dlpack) {
-                     dlpack::FromDLpackCapsule<Eigen::Vector3f>(dlpack, mesh.vertices_);
+                     cupoch_meshbase_vertices_from_dlpack(
+                             &mesh, pybind::GetDLManagedTensor(dlpack));
                  })
             .def("from_vertex_normals_dlpack",
                  [](geometry::TriangleMesh &mesh, py::capsule dlpack) {
-                     dlpack::FromDLpackCapsule<Eigen::Vector3f>(dlpack, mesh.vertex_normals_);
+                     cupoch_meshbase_vertex_normals_from_dlpack(
+                             &mesh, pybind::GetDLManagedTensor(dlpack));
                  })
             .def("from_vertex_colors_dlpack",
                  [](geometry::TriangleMesh &mesh, py::capsule dlpack) {
-                     dlpack::FromDLpackCapsule<Eigen::Vector3f>(dlpack, mesh.vertex_colors_);
+                     cupoch_meshbase_vertex_colors_from_dlpack(
+                             &mesh, pybind::GetDLManagedTensor(dlpack));
                  });
     docstring::ClassMethodDocInject(m, "TriangleMesh", "compute_edge_list");
     docstring::ClassMethodDocInject(m, "TriangleMesh",

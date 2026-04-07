@@ -27,6 +27,24 @@
 
 using namespace cupoch;
 
+extern "C" {
+cupoch::wrapper::device_vector_vector3f *cupoch_meshbase_get_vertices(
+        cupoch::geometry::MeshBase *mesh);
+void cupoch_meshbase_set_vertices(
+        cupoch::geometry::MeshBase *mesh,
+        const cupoch::wrapper::device_vector_vector3f *vertices);
+cupoch::wrapper::device_vector_vector3f *cupoch_meshbase_get_vertex_normals(
+        cupoch::geometry::MeshBase *mesh);
+void cupoch_meshbase_set_vertex_normals(
+        cupoch::geometry::MeshBase *mesh,
+        const cupoch::wrapper::device_vector_vector3f *normals);
+cupoch::wrapper::device_vector_vector3f *cupoch_meshbase_get_vertex_colors(
+        cupoch::geometry::MeshBase *mesh);
+void cupoch_meshbase_set_vertex_colors(
+        cupoch::geometry::MeshBase *mesh,
+        const cupoch::wrapper::device_vector_vector3f *colors);
+}
+
 void pybind_meshbase(py::module &m) {
     py::class_<geometry::MeshBase, PyGeometry3D<geometry::MeshBase>,
                std::shared_ptr<geometry::MeshBase>, geometry::GeometryBase3D>
@@ -77,31 +95,35 @@ void pybind_meshbase(py::module &m) {
             .def_property(
                     "vertices",
                     [](geometry::MeshBase &mesh) {
-                        return wrapper::device_vector_vector3f(mesh.vertices_);
+                        std::unique_ptr<wrapper::device_vector_vector3f> vertices(
+                                cupoch_meshbase_get_vertices(&mesh));
+                        return std::move(*vertices);
                     },
                     [](geometry::MeshBase &mesh,
                        const wrapper::device_vector_vector3f &vec) {
-                        wrapper::FromWrapper(mesh.vertices_, vec);
+                        cupoch_meshbase_set_vertices(&mesh, &vec);
                     })
             .def_property(
                     "vertex_normals",
                     [](geometry::MeshBase &mesh) {
-                        return wrapper::device_vector_vector3f(
-                                mesh.vertex_normals_);
+                        std::unique_ptr<wrapper::device_vector_vector3f> normals(
+                                cupoch_meshbase_get_vertex_normals(&mesh));
+                        return std::move(*normals);
                     },
                     [](geometry::MeshBase &mesh,
                        const wrapper::device_vector_vector3f &vec) {
-                        wrapper::FromWrapper(mesh.vertex_normals_, vec);
+                        cupoch_meshbase_set_vertex_normals(&mesh, &vec);
                     })
             .def_property(
                     "vertex_colors",
                     [](geometry::MeshBase &mesh) {
-                        return wrapper::device_vector_vector3f(
-                                mesh.vertex_colors_);
+                        std::unique_ptr<wrapper::device_vector_vector3f> colors(
+                                cupoch_meshbase_get_vertex_colors(&mesh));
+                        return std::move(*colors);
                     },
                     [](geometry::MeshBase &mesh,
                        const wrapper::device_vector_vector3f &vec) {
-                        wrapper::FromWrapper(mesh.vertex_colors_, vec);
+                        cupoch_meshbase_set_vertex_colors(&mesh, &vec);
                     });
     docstring::ClassMethodDocInject(
             m, "MeshBase", "has_vertex_normals",

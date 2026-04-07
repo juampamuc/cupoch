@@ -7,7 +7,22 @@ add_library(${PACKAGE_NAME} SHARED
 )
 
 cuda_add_library(cupoch_wrapper cupoch_pybind/device_vector_wrapper.cu
-    cupoch_pybind/device_map_wrapper.cu)
+    cupoch_pybind/device_vector_wrapper_bridge.cu
+    cupoch_pybind/device_map_wrapper.cu
+    cupoch_pybind/collision/collision_bridge.cu
+    cupoch_pybind/geometry/graph_bridge.cu
+    cupoch_pybind/geometry/keypoint_bridge.cu
+    cupoch_pybind/geometry/kdtree_flann_bridge.cu
+    cupoch_pybind/geometry/laserscanbuffer_bridge.cu
+    cupoch_pybind/geometry/boundingvolume_bridge.cu
+    cupoch_pybind/geometry/distancetransform_bridge.cu
+    cupoch_pybind/geometry/lineset_bridge.cu
+    cupoch_pybind/geometry/meshbase_bridge.cu
+    cupoch_pybind/geometry/occupancygrid_bridge.cu
+    cupoch_pybind/geometry/pointcloud_bridge.cu
+    cupoch_pybind/geometry/trianglemesh_bridge.cu
+    cupoch_pybind/geometry/voxelgrid_bridge.cu
+    cupoch_pybind/registration/feature_bridge.cu)
 target_include_directories(cupoch_wrapper PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
 )

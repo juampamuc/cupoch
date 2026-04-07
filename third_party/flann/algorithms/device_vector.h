@@ -22,7 +22,8 @@
 #define FLANN_DEVICE_VECTOR_H_
 
 #ifdef USE_RMM
-#include <rmm/thrust_rmm_allocator.h>
+#include <rmm/device_vector.hpp>
+#include <rmm/exec_policy.hpp>
 #else
 #include <thrust/device_vector.h>
 #endif
@@ -44,7 +45,7 @@ template <typename T>
 using device_vector = thrust::device_vector<T>;
 
 inline decltype(auto) exec_policy(cudaStream_t stream = 0) {
-    return &thrust::cuda::par;
+    return thrust::cuda::par.on(stream);
 }
 
 #endif
