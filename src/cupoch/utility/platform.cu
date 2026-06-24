@@ -19,10 +19,15 @@
  * IN THE SOFTWARE.
  **/
 #include "cupoch/utility/platform.h"
+// cuda_gl_interop.h (CUDA-OpenGL interop) has no ROCm/HIP equivalent and is not
+// needed here -- this file uses only stream/device runtime calls, no GL interop
+// (the cudaGraphics* interop lives in the deferred visualization module).
+#if !defined(USE_HIP)
 #if defined(__arm__) || defined(__aarch64__)
 #include <GL/gl.h>
 #endif
 #include <cuda_gl_interop.h>
+#endif
 
 #include <mutex>
 

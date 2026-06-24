@@ -49,6 +49,7 @@ endif()
 set(INSTALL_CMAKE_DIR ${DEF_INSTALL_CMAKE_DIR} CACHE PATH
     "Installation directory for CMake files")
 
+option(USE_HIP                   "Build with HIP for AMD GPUs (ROCm)"       OFF)
 option(BUILD_UNIT_TESTS          "Build the Cupoch unit tests"              ON)
 option(BUILD_EIGEN3              "Use the Eigen3 that comes with Cupoch"    ON)
 option(BUILD_GLEW                "Build glew from source"                   OFF)
@@ -58,7 +59,11 @@ option(BUILD_PNG                 "Build png from source"                    OFF)
 option(BUILD_JPEG                "Build jpeg-turbo from source"             ON)
 option(BUILD_PYBIND11            "Build pybind11 from source"               ON)
 option(BUILD_PYTHON_MODULE       "Build the python module"                  ON)
-option(USE_RMM                   "Use rmm library(fast memory allocator)"   ON)
+include(CMakeDependentOption)
+# RMM (RAPIDS Memory Manager) is CUDA-only. Force it OFF (and hide it) for the HIP
+# build, where the allocator falls back to thrust::device_vector
+# (see utility/device_vector.h); the user never has to pass -DUSE_RMM=OFF.
+cmake_dependent_option(USE_RMM   "Use rmm library(fast memory allocator)"   ON "NOT USE_HIP" OFF)
 option(STATIC_WINDOWS_RUNTIME    "Use static (MT/MTd) Windows runtime"      OFF)
 option(CMAKE_USE_RELATIVE_PATHS  "If true, cmake will use relative paths"   ON)
 
@@ -159,6 +164,77 @@ elseif (UNIX)
     message(STATUS "Compiling on Unix")
 endif ()
 
+if (USE_HIP)
+  # --- ROCm/HIP build ----------------------------------------------------
+  # cupoch uses the legacy FindCUDA module (cuda_add_library + CUDA_NVCC_FLAGS).
+  # Rather than rewrite every module's CMakeLists, provide a cuda_add_library()
+  # shim that creates a normal library and marks the .cu sources LANGUAGE HIP,
+  # so each `cuda_add_library(cupoch_xxx ...)` call is untouched and the NVIDIA
+  # path stays unchanged. host C++ is compiled by the host compiler; only
+  # .cu translation units see the HIP toolchain.
+  if(NOT DEFINED CMAKE_HIP_COMPILER AND EXISTS "/opt/rocm/llvm/bin/clang++")
+    set(CMAKE_HIP_COMPILER "/opt/rocm/llvm/bin/clang++")
+  endif()
+  # enable_language(HIP) honors -DCMAKE_HIP_ARCHITECTURES, otherwise auto-detects
+  # the host GPU(s), and errors on a no-GPU build host.
+  enable_language(HIP)
+  # On Windows with clang, the MSVC block above does not fire, so no -std=c++17
+  # is set globally. rocPRIM (pulled in by rocThrust) requires C++17; enforce it
+  # for all HIP and CXX TUs when the compiler is clang-based on Windows.
+  if (WIN32 AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    set(CMAKE_CXX_STANDARD 17)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+    set(CMAKE_HIP_STANDARD 17)
+    set(CMAKE_HIP_STANDARD_REQUIRED ON)
+    # clang-on-Windows does not enter the MSVC block above, so set the two Windows
+    # definitions the HIP build needs here (the NVIDIA MSVC build never sees them):
+    # NOMINMAX keeps windows.h min/max macros from shadowing Eigen/STL, and
+    # _USE_MATH_DEFINES exposes M_PI / M_PI_2 from <cmath>.
+    add_definitions(-DNOMINMAX -D_USE_MATH_DEFINES)
+  endif ()
+  find_package(hip REQUIRED)
+
+  # IMPORTANT: link only hip::host (runtime), never hip::device or roc::rocthrust
+  # as a target dependency. hip::device carries `-x hip --offload-arch=...` as
+  # INTERFACE_COMPILE_OPTIONS that propagate to ALL languages of a consuming
+  # target -- including the host .cpp files in cuda_add_library targets -- which
+  # makes g++ choke on `--offload-arch`. The .cu files are marked LANGUAGE HIP and
+  # compiled by the HIP toolchain on their own; rocThrust/hipCUB are header-only
+  # under /opt/rocm/include (already on the HIP compiler's default search path),
+  # so they need no link-time target.
+  macro(cuda_add_library _name)
+    set(_cupoch_hip_srcs "")
+    set(_cupoch_hip_opts "")
+    foreach(_arg ${ARGN})
+      if(_arg STREQUAL "STATIC" OR _arg STREQUAL "SHARED" OR _arg STREQUAL "MODULE")
+        list(APPEND _cupoch_hip_opts ${_arg})
+      else()
+        list(APPEND _cupoch_hip_srcs ${_arg})
+      endif()
+    endforeach()
+    add_library(${_name} ${_cupoch_hip_opts} ${_cupoch_hip_srcs})
+    # Mark every source LANGUAGE HIP, not just .cu. cupoch's GPU library targets
+    # mix .cu and .cpp, and several .cpp include rocThrust/stdgpu headers (e.g.
+    # utility/helper.cpp via helper.h) that only the HIP (clang) compiler can
+    # parse. Under nvcc the whole cuda_add_library was driven by the CUDA
+    # compiler, so .cpp there could include CUDA Thrust too; mirror that by
+    # compiling all of these TUs with the HIP toolchain (clang compiles plain
+    # host C++ unchanged).
+    foreach(_src ${_cupoch_hip_srcs})
+      if(_src MATCHES "\\.(cu|cpp)$")
+        set_source_files_properties(${_src} PROPERTIES LANGUAGE HIP)
+      endif()
+    endforeach()
+    set_target_properties(${_name} PROPERTIES HIP_ARCHITECTURES "${CMAKE_HIP_ARCHITECTURES}")
+    target_link_libraries(${_name} hip::host)
+  endmacro()
+
+  # CUDA_LIBRARIES/CUDA_INCLUDE_DIRS are referenced by the existing CMake; map
+  # them to the HIP runtime so those lines keep working without edits.
+  set(CUDA_LIBRARIES hip::host)
+  set(CUDA_INCLUDE_DIRS "")
+  add_compile_definitions(USE_HIP __HIP_PLATFORM_AMD__)
+else ()
 find_package(CUDA REQUIRED)
 enable_language(CUDA)
 if(NOT CMAKE_CUDA_ARCHITECTURES)
@@ -203,10 +279,16 @@ set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}
     -Xcudafe "--diag_suppress=integer_sign_change"
     -Xcudafe "--diag_suppress=partial_override"
     -Xcudafe "--diag_suppress=virtual_function_decl_hidden")
+endif ()  # USE_HIP
+
 if (USE_RMM)
+    # RMM (RAPIDS Memory Manager) is CUDA-only; the HIP build uses USE_RMM=OFF and
+    # falls back to thrust::device_vector (see utility/device_vector.h).
     add_definitions(-DUSE_RMM)
     add_definitions(-DLIBCUDACXX_ENABLE_EXPERIMENTAL_MEMORY_RESOURCE)
-    set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -DLIBCUDACXX_ENABLE_EXPERIMENTAL_MEMORY_RESOURCE)
+    if (NOT USE_HIP)
+        set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -DLIBCUDACXX_ENABLE_EXPERIMENTAL_MEMORY_RESOURCE)
+    endif ()
 endif ()
 
 # 3rd-party projects that are added with external_project_add will be installed
@@ -216,13 +298,22 @@ endif ()
 # - Libraries: cupoch/build/3rdparty_install/lib/extern_lib.a
 set(3RDPARTY_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/3rdparty_install")
 
-add_subdirectory(third_party)
+if (USE_HIP)
+    # Full ROCm/HIP build: the same module set as the NVIDIA build, minus only
+    # the bits that are genuinely non-viable on ROCm (decided automatically, not
+    # behind a user flag). The third-party graph is assembled by a HIP-specific
+    # file rather than third_party/CMakeLists.txt (which bakes in the legacy
+    # FindCUDA assumptions); see cmake/cupoch_hip_3rdparty.cmake.
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/cupoch_hip_modules.cmake)
+else ()
+    add_subdirectory(third_party)
 
-include_directories(
-    SYSTEM
-    ${3RDPARTY_INCLUDE_DIRS}
-)
+    include_directories(
+        SYSTEM
+        ${3RDPARTY_INCLUDE_DIRS}
+    )
 
-include_directories(src)
-add_subdirectory(src)
-add_subdirectory(examples)
+    include_directories(src)
+    add_subdirectory(src)
+    add_subdirectory(examples)
+endif ()

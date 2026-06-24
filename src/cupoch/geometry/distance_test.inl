@@ -25,7 +25,7 @@ namespace geometry {
 
 namespace distance_test {
 
-float PointLine(const Eigen::Vector3f &p,
+__host__ __device__ float PointLine(const Eigen::Vector3f &p,
                 const Eigen::Vector3f &q1,
                 const Eigen::Vector3f &q2) {
     const float d_q12 = (q1 - q2).norm();
@@ -33,7 +33,7 @@ float PointLine(const Eigen::Vector3f &p,
     return (p - q1).cross(p - q2).norm() / d_q12;
 }
 
-float PointPlane(const Eigen::Vector3f &p,
+__host__ __device__ float PointPlane(const Eigen::Vector3f &p,
                  const Eigen::Vector3f &vert0,
                  const Eigen::Vector3f &vert1,
                  const Eigen::Vector3f &vert2) {
@@ -44,7 +44,7 @@ float PointPlane(const Eigen::Vector3f &p,
     return abs(n.dot(p - vert0));
 }
 
-float PointAABBSquared(const Eigen::Vector3f &p,
+__host__ __device__ float PointAABBSquared(const Eigen::Vector3f &p,
                        const Eigen::Vector3f &min_bound,
                        const Eigen::Vector3f &max_bound) {
     float dist2 = 0.0f;
@@ -56,7 +56,7 @@ float PointAABBSquared(const Eigen::Vector3f &p,
     return dist2;
 }
 
-float LineSegmentLineSegmentSquared(const Eigen::Vector3f &p0,
+__host__ __device__ float LineSegmentLineSegmentSquared(const Eigen::Vector3f &p0,
                                     const Eigen::Vector3f &q0,
                                     const Eigen::Vector3f &p1,
                                     const Eigen::Vector3f &q1,

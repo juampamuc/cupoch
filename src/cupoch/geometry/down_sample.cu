@@ -295,7 +295,11 @@ std::shared_ptr<PointCloud> PointCloud::UniformDownSample(
     output->points_.resize(n_out);
     if (has_normals) output->normals_.resize(n_out);
     if (has_colors) output->colors_.resize(n_out);
+#if defined(USE_HIP)
+    thrust::system::hip::unique_eager_event copy_e[3];
+#else
     thrust::system::cuda::unique_eager_event copy_e[3];
+#endif
     thrust::strided_range<
             utility::device_vector<Eigen::Vector3f>::const_iterator>
             range_points(points_.begin(), points_.end(), every_k_points);

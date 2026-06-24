@@ -31,7 +31,11 @@
 #include "cupoch_pybind/planning/planning.h"
 #include "cupoch_pybind/registration/registration.h"
 #include "cupoch_pybind/kinfu/kinfu.h"
+#if !defined(USE_HIP)
+// imageproc wraps the CUDA-only libSGM stereo library, which is not ported to
+// HIP, so its bindings are excluded on the ROCm build.
 #include "cupoch_pybind/imageproc/imageproc.h"
+#endif
 #include "cupoch_pybind/utility/utility.h"
 #include "cupoch_pybind/visualization/visualization.h"
 
@@ -67,7 +71,9 @@ PYBIND11_MODULE(cupoch, m) {
     pybind_registration(m);
     pybind_odometry(m);
     pybind_kinfu(m);
+#if !defined(USE_HIP)
     pybind_imageproc(m);
+#endif
     pybind_planning(m);
     pybind_kinematics(m);
     pybind_visualization(m);

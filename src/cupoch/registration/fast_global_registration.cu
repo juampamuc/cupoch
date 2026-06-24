@@ -202,8 +202,13 @@ std::tuple<std::vector<Eigen::Vector3f>, float, float> NormalizePointCloud(
     std::vector<Eigen::Vector3f> pcd_mean_vec;
     float scale_global, scale_start;
     Eigen::Vector3f means[2];
+#if defined(USE_HIP)
+    thrust::system::hip::unique_eager_future<Eigen::Vector3f> reduces[2];
+    thrust::system::hip::unique_eager_event foreach[2];
+#else
     thrust::system::cuda::unique_eager_future<Eigen::Vector3f> reduces[2];
     thrust::system::cuda::unique_eager_event foreach[2];
+#endif
 
     for (int i = 0; i < num; ++i) {
         reduces[i] = thrust::async::reduce(

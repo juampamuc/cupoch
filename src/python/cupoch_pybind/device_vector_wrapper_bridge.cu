@@ -70,4 +70,16 @@ void cupoch_device_vector_vector3i_iadd_host(
     DeviceVectorIAddHost(self, host_data, size);
 }
 
+#if defined(_WIN32)
+// On Windows, unsigned long is 32-bit while unsigned __int64 is 64-bit.
+// UInt64Vector (pybind_eigen_vector_of_scalar<unsigned __int64>) needs a
+// separate bridge so the 64-bit type is handled correctly on Windows.
+void cupoch_device_vector_uint64_iadd_host(
+        cupoch::wrapper::device_vector_wrapper<unsigned __int64> *self,
+        const unsigned __int64 *host_data,
+        size_t size) {
+    DeviceVectorIAddHost(self, host_data, size);
+}
+#endif
+
 }  // extern "C"

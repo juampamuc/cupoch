@@ -114,8 +114,10 @@ bool GraphRenderer<Dim>::UpdateGeometry() {
     return true;
 }
 
+namespace cupoch { namespace visualization { namespace glsl {
 template class GraphRenderer<2>;
 template class GraphRenderer<3>;
+} } }
 
 bool TriangleMeshRenderer::Render(const RenderOption &option,
                                   const ViewControl &view) {

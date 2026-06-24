@@ -25,7 +25,10 @@
 #include <thrust/iterator/discard_iterator.h>
 #include <thrust/iterator/zip_iterator.h>
 #include <thrust/remove.h>
-#if THRUST_VERSION >= 100905 && !defined(_WIN32)
+// On Windows with MSVC <thrust/type_traits/integer_sequence.h> is unavailable;
+// with clang (USE_HIP) the header exists and must be included to avoid the
+// ambiguous-make_index_sequence error from the local alias vs thrust's own.
+#if THRUST_VERSION >= 100905 && (!defined(_WIN32) || defined(USE_HIP))
 #include <thrust/type_traits/integer_sequence.h>
 #else
 namespace thrust {

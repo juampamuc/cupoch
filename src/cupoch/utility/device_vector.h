@@ -43,9 +43,25 @@
 #endif
 #include <thrust/host_vector.h>
 #include <cupoch/utility/pinned_allocator.h>
+#include "cupoch/utility/cuda_to_hip.h"
 
 
-#if defined(_WIN32)
+#if defined(_WIN32) && defined(USE_HIP)
+// HIP's float4 (HIP_vector_type<float,4>) has an explicit constructor which
+// breaks aggregate-init used in cupoch. Define a plain-struct float4_t and
+// keep make_float4 as an alias so the rest of the code is unchanged.
+struct float4_t {
+    float x, y, z, w;
+};
+
+__host__ __device__ inline float4_t make_float4_t(float x,
+                                                  float y,
+                                                  float z,
+                                                  float w) {
+    float4_t f4 = {x, y, z, w};
+    return f4;
+}
+#elif defined(_WIN32)
 struct float4_t {
     float x, y, z, w;
 };
@@ -58,7 +74,6 @@ __host__ __device__ inline float4_t make_float4_t(float x,
     return f4;
 }
 #else
-#include <cuda_runtime.h>
 using float4_t = float4;
 
 __host__ __device__ inline float4_t make_float4_t(float x,
@@ -103,7 +118,13 @@ template <typename T>
 using device_vector = thrust::device_vector<T>;
 
 inline decltype(auto) exec_policy(cudaStream_t stream = 0) {
+#if defined(USE_HIP)
+    // rocThrust exposes the stream-bound parallel policy under thrust::hip,
+    // not thrust::cuda (which does not exist on the HIP device system).
+    return thrust::hip::par.on(stream);
+#else
     return thrust::cuda::par.on(stream);
+#endif
 }
 
 inline void InitializeAllocator(

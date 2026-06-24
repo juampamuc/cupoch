@@ -610,8 +610,10 @@ size_t SimpleShaderForGraphNode<Dim>::GetDataSize(
     return ((const geometry::Graph<Dim> &)geometry).points_.size();
 }
 
+namespace cupoch { namespace visualization { namespace glsl {
 template class SimpleShaderForGraphNode<2>;
 template class SimpleShaderForGraphNode<3>;
+} } }
 
 template <int Dim>
 bool SimpleShaderForGraphEdge<Dim>::PrepareRendering(
@@ -667,8 +669,10 @@ size_t SimpleShaderForGraphEdge<Dim>::GetDataSize(
     return ((const geometry::Graph<Dim> &)geometry).lines_.size() * 2;
 }
 
+namespace cupoch { namespace visualization { namespace glsl {
 template class SimpleShaderForGraphEdge<2>;
 template class SimpleShaderForGraphEdge<3>;
+} } }
 
 bool SimpleShaderForAxisAlignedBoundingBox::PrepareRendering(
         const geometry::Geometry &geometry,

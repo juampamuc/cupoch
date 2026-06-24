@@ -150,7 +150,19 @@ struct maurer_axis_functor {
 __global__ void color_axis_kernel(const DistanceVoxel* input,
                                   DistanceVoxel* output,
                                   int resolution) {
+#if defined(USE_HIP)
+    // clang/HIP forbids __shared__ variables of a non-trivially-constructible
+    // type (DistanceVoxel's member Eigen::Vector3ui16 has a non-trivial default
+    // ctor). The array is uninitialized scratch (every element is written before
+    // it is read), so back it with raw aligned storage and view it as the 2D
+    // DistanceVoxel array. nvcc accepts the plain declaration unchanged.
+    __shared__ alignas(DistanceVoxel)
+            unsigned char block_storage[BLOCKSIZE * BLOCKSIZE * sizeof(DistanceVoxel)];
+    DistanceVoxel(&block)[BLOCKSIZE][BLOCKSIZE] =
+            *reinterpret_cast<DistanceVoxel(*)[BLOCKSIZE][BLOCKSIZE]>(block_storage);
+#else
     __shared__ DistanceVoxel block[BLOCKSIZE][BLOCKSIZE];
+#endif
     int col = threadIdx.x;
     int tid = threadIdx.y;
     int tx = blockIdx.x * blockDim.x + col;
