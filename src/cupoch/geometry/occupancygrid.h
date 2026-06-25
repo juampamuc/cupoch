@@ -50,7 +50,7 @@ public:
     float prob_log_ = std::numeric_limits<float>::quiet_NaN();
 };
 
-inline OccupancyVoxel operator+(const OccupancyVoxel& lhs,
+__host__ __device__ inline OccupancyVoxel operator+(const OccupancyVoxel& lhs,
                                 const OccupancyVoxel& rhs) {
     OccupancyVoxel out = lhs;
     out.prob_log_ += rhs.prob_log_;
@@ -59,7 +59,7 @@ inline OccupancyVoxel operator+(const OccupancyVoxel& lhs,
     return out;
 }
 
-inline OccupancyVoxel operator-(const OccupancyVoxel& lhs,
+__host__ __device__ inline OccupancyVoxel operator-(const OccupancyVoxel& lhs,
                                 const OccupancyVoxel& rhs) {
     OccupancyVoxel out = lhs;
     out.prob_log_ -= rhs.prob_log_;

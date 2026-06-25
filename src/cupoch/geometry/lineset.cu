@@ -278,5 +278,9 @@ LineSet<Dim> &LineSet<Dim>::PaintIndexedColor(
     return *this;
 }
 
+namespace cupoch {
+namespace geometry {
 template class LineSet<2>;
 template class LineSet<3>;
+}  // namespace geometry
+}  // namespace cupoch

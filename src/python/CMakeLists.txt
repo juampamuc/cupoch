@@ -2,6 +2,15 @@ set(PACKAGE_NAME cupoch)
 
 file(GLOB_RECURSE PY_ALL_SOURCE_FILES "cupoch_pybind/*.cpp")
 
+if (USE_HIP)
+    # imageproc is libSGM-only (CUDA stereo, not ported to HIP), so its bindings
+    # are excluded and the pybind entry point is compiled with the imageproc and
+    # ScalableTSDFVolume bindings guarded out (see cupoch_pybind.cpp /
+    # integration/integration.cpp). ScalableTSDFVolume itself is not built on
+    # HIP (AMDGPU scratch-frame limit; see integration/CMakeLists.txt).
+    list(FILTER PY_ALL_SOURCE_FILES EXCLUDE REGEX "cupoch_pybind/imageproc/")
+endif ()
+
 add_library(${PACKAGE_NAME} SHARED
     ${PY_ALL_SOURCE_FILES}
 )
@@ -36,12 +45,31 @@ target_include_directories(${PACKAGE_NAME} SYSTEM PRIVATE
     ${PYBIND11_INCLUDE_DIR} ${PYTHON_INCLUDE_DIRS}
 )
 
+if (USE_HIP)
+    # The pybind .cpp transitively include cupoch headers that pull in rocThrust;
+    # only the HIP (clang) compiler can parse those. Mark every wrapper/binding
+    # TU LANGUAGE HIP (the cuda_add_library shim already does this for the .cu).
+    set_source_files_properties(${PY_ALL_SOURCE_FILES} PROPERTIES LANGUAGE HIP)
+    set_target_properties(${PACKAGE_NAME} PROPERTIES HIP_ARCHITECTURES "${CMAKE_HIP_ARCHITECTURES}")
+endif ()
+
+# cupoch_imageproc is libSGM-only and not built on HIP; the GL renderer
+# (cupoch_visualization) is built only when OpenGL is present.
+set(_cupoch_py_optional_libs "")
+if (NOT USE_HIP)
+    list(APPEND _cupoch_py_optional_libs cupoch_imageproc)
+endif ()
+if (TARGET cupoch_visualization)
+    list(APPEND _cupoch_py_optional_libs cupoch_visualization)
+endif ()
+
 target_link_libraries(${PACKAGE_NAME} PRIVATE cupoch_registration
-                      cupoch_visualization cupoch_io cupoch_odometry
+                      cupoch_io cupoch_odometry
                       cupoch_planning cupoch_kinematics cupoch_kinfu
                       cupoch_collision cupoch_integration
-                      cupoch_imageproc cupoch_geometry
+                      cupoch_geometry
                       cupoch_utility cupoch_wrapper
+                      ${_cupoch_py_optional_libs}
                       ${3RDPARTY_LIBRARIES} ${CUDA_LIBRARIES})
 if (WIN32)
     target_link_libraries(${PACKAGE_NAME} PRIVATE ${PYTHON_LIBRARIES})

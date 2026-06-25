@@ -44,7 +44,7 @@ __host__ __device__ Eigen::Vector3f Corner(const Eigen::Vector3f &min_bound,
 
 }  // namespace
 
-bool TriangleTriangle3d(const Eigen::Vector3f &p0,
+__host__ __device__ bool TriangleTriangle3d(const Eigen::Vector3f &p0,
                         const Eigen::Vector3f &p1,
                         const Eigen::Vector3f &p2,
                         const Eigen::Vector3f &q0,
@@ -68,7 +68,7 @@ bool TriangleTriangle3d(const Eigen::Vector3f &p0,
                             q1m.data(), q2m.data()) != 0;
 }
 
-bool TriangleAABB(const Eigen::Vector3f &box_center,
+__host__ __device__ bool TriangleAABB(const Eigen::Vector3f &box_center,
                   const Eigen::Vector3f &box_half_size,
                   const Eigen::Vector3f &vert0,
                   const Eigen::Vector3f &vert1,
@@ -81,7 +81,7 @@ bool TriangleAABB(const Eigen::Vector3f &box_center,
                          tri_verts) != 0;
 }
 
-bool AABBAABB(const Eigen::Vector3f &min_bound0,
+__host__ __device__ bool AABBAABB(const Eigen::Vector3f &min_bound0,
               const Eigen::Vector3f &max_bound0,
               const Eigen::Vector3f &min_bound1,
               const Eigen::Vector3f &max_bound1) {
@@ -90,7 +90,7 @@ bool AABBAABB(const Eigen::Vector3f &min_bound0,
            (min_bound0[2] <= max_bound1[2] && max_bound0[2] >= min_bound1[2]);
 }
 
-bool LineSegmentAABB(const Eigen::Vector3f &p0,
+__host__ __device__ bool LineSegmentAABB(const Eigen::Vector3f &p0,
                      const Eigen::Vector3f &p1,
                      const Eigen::Vector3f &min_bound,
                      const Eigen::Vector3f &max_bound) {
@@ -117,7 +117,7 @@ bool LineSegmentAABB(const Eigen::Vector3f &p0,
     return true;
 }
 
-bool RayAABB(const Eigen::Vector3f &p,
+__host__ __device__ bool RayAABB(const Eigen::Vector3f &p,
              const Eigen::Vector3f &d,
              const Eigen::Vector3f &min_bound,
              const Eigen::Vector3f &max_bound,
@@ -142,7 +142,7 @@ bool RayAABB(const Eigen::Vector3f &p,
     return true;
 }
 
-bool SphereAABB(const Eigen::Vector3f &center,
+__host__ __device__ bool SphereAABB(const Eigen::Vector3f &center,
                 float radius,
                 const Eigen::Vector3f &min_bound,
                 const Eigen::Vector3f &max_bound) {
@@ -150,7 +150,7 @@ bool SphereAABB(const Eigen::Vector3f &center,
     return dist2 <= radius * radius;
 }
 
-bool BoxBox(const Eigen::Vector3f &extents1,
+__host__ __device__ bool BoxBox(const Eigen::Vector3f &extents1,
             const Eigen::Matrix3f &rot1,
             const Eigen::Vector3f &center1,
             const Eigen::Vector3f &extents2,
@@ -208,7 +208,7 @@ bool BoxBox(const Eigen::Vector3f &extents1,
     return true;
 }
 
-bool CapsuleAABB(float radius,
+__host__ __device__ bool CapsuleAABB(float radius,
                  const Eigen::Vector3f &p,
                  const Eigen::Vector3f &d,
                  const Eigen::Vector3f &min_bound,

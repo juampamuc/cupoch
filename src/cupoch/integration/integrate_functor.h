@@ -80,7 +80,7 @@ struct integrate_functor {
     const int width_;
     const int num_of_channels_;
     const TSDFVolumeColorType color_type_;
-    __device__ virtual ~integrate_functor(){};
+    __host__ __device__ virtual ~integrate_functor(){};
     __device__ void ComputeTSDF(geometry::TSDFVoxel &voxel,
                                 const Eigen::Vector3f &origin,
                                 int x,

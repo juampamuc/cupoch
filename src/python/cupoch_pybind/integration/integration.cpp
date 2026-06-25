@@ -150,6 +150,11 @@ In SIGGRAPH, 1996)");
     docstring::ClassMethodDocInject(m, "UniformTSDFVolume",
                                     "extract_voxel_point_cloud");
 
+#if !defined(USE_HIP)
+    // ScalableTSDFVolume is not built on the ROCm/HIP target (its device
+    // stdgpu::unordered_map stores an 80 KB VolumeUnit by value, past the
+    // AMDGPU scratch-frame limit; see integration/CMakeLists.txt), so its
+    // bindings are excluded there. UniformTSDFVolume above is available.
     // open3d.integration.ScalableTSDFVolume: open3d.integration.TSDFVolume
     py::class_<integration::ScalableTSDFVolume,
                PyTSDFVolume<integration::ScalableTSDFVolume>,
@@ -193,6 +198,7 @@ In SIGGRAPH, 2013)");
                                      ? std::string("without color.")
                                      : std::string("with color."));
                  });
+#endif  // !USE_HIP
 }
 
 void pybind_integration_methods(py::module &m) {

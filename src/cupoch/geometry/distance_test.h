@@ -20,7 +20,7 @@
  **/
 #pragma once
 
-#include <cuda.h>
+#include "cupoch/utility/cuda_to_hip.h"
 
 #include <Eigen/Dense>
 

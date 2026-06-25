@@ -32,7 +32,9 @@ template <int Dim>
 struct convert_float4_functor {
     __device__ float4_t
     operator()(const Eigen::Matrix<float, Dim, 1> &x) const {
-        float4_t res = {0};
+        // value-init (not = {0}); HIP's float4 (HIP_vector_type) has an explicit
+        // ctor that rejects copy-init from a single 0, unlike CUDA's plain struct.
+        float4_t res = {};
         float *pt = (float *)&res;
         constexpr int num = (Dim > 4) ? 4 : Dim;
 #pragma unroll

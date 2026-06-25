@@ -52,6 +52,14 @@ void cupoch_device_vector_vector3i_iadd_host(
         cupoch::wrapper::device_vector_vector3i *self,
         const Eigen::Vector3i *host_data,
         size_t size);
+#if defined(_WIN32)
+// On Windows, unsigned long is 32-bit while unsigned __int64 is 64-bit.
+// UInt64Vector uses unsigned __int64; provide a separate bridge for it.
+void cupoch_device_vector_uint64_iadd_host(
+        cupoch::wrapper::device_vector_wrapper<unsigned __int64> *self,
+        const unsigned __int64 *host_data,
+        size_t size);
+#endif
 }
 
 namespace pybind11 {
@@ -106,6 +114,16 @@ void DeviceVectorIAddHost<unsigned long>(
         size_t size) {
     cupoch_device_vector_ulong_iadd_host(&self, host_data, size);
 }
+
+#if defined(_WIN32)
+template <>
+void DeviceVectorIAddHost<unsigned __int64>(
+        cupoch::wrapper::device_vector_wrapper<unsigned __int64> &self,
+        const unsigned __int64 *host_data,
+        size_t size) {
+    cupoch_device_vector_uint64_iadd_host(&self, host_data, size);
+}
+#endif
 
 template <>
 void DeviceVectorIAddHost<float>(

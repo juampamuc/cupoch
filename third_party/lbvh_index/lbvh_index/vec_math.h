@@ -29,7 +29,7 @@
 
 #pragma once
 
-#if defined(__CUDACC__) || defined(__CUDABE__)
+#if defined(__CUDACC__) || defined(__CUDABE__) || defined(__HIPCC__)
 #    define SUTIL_HOSTDEVICE __host__ __device__
 #    define SUTIL_INLINE __forceinline__
 #    define CONST_STATIC_INIT( ... )
@@ -60,7 +60,7 @@
 #endif
 
 
-#if !defined(__CUDACC__)
+#if !defined(__CUDACC__) && !defined(__HIPCC__)
 
 SUTIL_INLINE SUTIL_HOSTDEVICE int max(int a, int b)
 {

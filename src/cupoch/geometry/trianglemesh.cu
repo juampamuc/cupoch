@@ -106,7 +106,7 @@ struct align_triangle_functor {
 
 struct edge_first_eq_functor {
     __device__ bool operator()(const Eigen::Vector2i &lhs,
-                               const Eigen::Vector2i &rhs) {
+                               const Eigen::Vector2i &rhs) const {
         return lhs[0] == rhs[0];
     };
 };

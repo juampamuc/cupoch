@@ -22,7 +22,7 @@
 #if defined(_WIN32)
 #include <windows.h>
 #endif
-#include <cuda_runtime.h>
+#include "cupoch/utility/cuda_to_hip.h"
 
 #include <iostream>
 

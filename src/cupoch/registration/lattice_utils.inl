@@ -35,7 +35,7 @@ __host__ __device__ float Scale(int index, bool no_blur) {
 
 // The method to create the lattice grid from lattice
 template <int Dim>
-void CreateLatticeGrid(float *feature,
+__host__ __device__ void CreateLatticeGrid(float *feature,
                        LatticeCoordKey<Dim> *lattice_coord_keys,
                        float *barycentric,
                        bool no_blur) {

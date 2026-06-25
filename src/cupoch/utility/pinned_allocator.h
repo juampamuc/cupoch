@@ -20,13 +20,23 @@
 
 #pragma once
 
+#if defined(USE_HIP)
+// This file is a vendored copy of Thrust's CUDA pinned_allocator. The only
+// CUDA-only dependency is <thrust/system/cuda/error.h> (used by deallocate to
+// build a thrust::system_error). rocThrust does NOT provide an equivalent
+// raw-pointer pinned allocator: thrust::hip::universal_host_pinned_allocator is
+// a stateless_resource_allocator whose `pointer` is a fancy thrust::pointer,
+// not a raw T*. cupoch's pybind11 buffer protocol and device_vector_wrapper
+// require a raw T* (host_vector::data() must yield T*), so keep this allocator's
+// raw-pointer T* design and drop only the CUDA error-category usage on HIP
+// (allocate/deallocate go through hipHostMalloc/hipHostFree via the cuda_to_hip
+// aliases). Defined below under the same thrust::cuda::experimental name.
+#include "cupoch/utility/cuda_to_hip.h"
 #include <thrust/detail/config.h>
 #include <stdexcept>
 #include <limits>
 #include <string>
-#include <thrust/system/system_error.h>
-#include <thrust/system/cuda/error.h>
-
+#define CUPOCH_PINNED_ALLOCATOR_HIP 1
 
 #ifndef THRUST_NAMESPACE_BEGIN
 #define THRUST_NAMESPACE_BEGIN namespace thrust {
@@ -35,6 +45,8 @@
 #ifndef THRUST_NAMESPACE_END
 #define THRUST_NAMESPACE_END }
 #endif // THRUST_NAMESPACE_END
+
+#endif  // USE_HIP (include/prelude difference; the allocator below is shared)
 
 
 THRUST_NAMESPACE_BEGIN
@@ -192,7 +204,11 @@ template<typename T>
       if(error)
       {
         cudaGetLastError(); // Clear global CUDA error state.
+#if defined(CUPOCH_PINNED_ALLOCATOR_HIP)
+        throw std::bad_alloc();
+#else
         throw thrust::system_error(error, thrust::cuda_category());
+#endif
       } // end if
     } // end deallocate()
 

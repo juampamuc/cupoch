@@ -77,6 +77,31 @@ cd build
 cmake ..; make install-pip-package -j
 ```
 
+### Build with ROCm (AMD GPUs)
+
+cupoch also builds on AMD GPUs with [ROCm](https://rocm.docs.amd.com/) by
+configuring with `-DUSE_HIP=ON`. This builds the full library set (the GPU
+compute modules, the OpenGL visualization, and the Python module), the same
+modules as the CUDA build.
+
+```
+git clone https://github.com/neka-nat/cupoch.git --recurse
+cd cupoch
+mkdir build
+cd build
+cmake .. -DUSE_HIP=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build . -j
+```
+
+The GPU architecture is detected automatically; override it for cross-compiling
+with `-DCMAKE_HIP_ARCHITECTURES=gfx90a` (or `gfx1100`, etc.). The NVIDIA CUDA
+build is unchanged: `USE_HIP` defaults to `OFF`.
+
+Two features are not available on the ROCm build: the libSGM-based stereo
+matcher in `imageproc`, and `ScalableTSDFVolume` (its device hash map stores a
+volume unit too large for the AMD GPU scratch limit; use `UniformTSDFVolume`
+instead). Both are skipped automatically; the rest of the library is unaffected.
+
 ### Installation for Jetson Nano
 You can also install cupoch using pip on Jetson Nano.
 Please set up Jetson using [jetpack](https://developer.nvidia.com/embedded/jetpack) and install some packages with apt.
